@@ -1,0 +1,3841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beam Kerf Offset</title>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   LASER BEAM PRESETS  —  EDIT YOUR LASER SIZES HERE
+   Add, remove, or rename entries to match your machines.
+   Format: { name, w (width mm), h (height mm), d (diagonal mm) }
+════════════════════════════════════════════════════════ */
+const BEAM_PRESETS = [
+  { name: 'Default 1', w: 0.20, h: 0.10, d: 0.16 },
+  { name: 'Default 2', w: 0.20, h: 0.10, d: 0.16 },
+  { name: 'Default 3', w: 0.20, h: 0.10, d: 0.16 },
+  { name: 'Default 4', w: 0.20, h: 0.10, d: 0.16 },
+  { name: 'Default 5', w: 0.20, h: 0.10, d: 0.16 },
+  { name: 'Default 6', w: 0.20, h: 0.10, d: 0.18 },
+];
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root{
+    --color-background-primary:#000;
+    --color-background-secondary:#111;
+    --color-text-primary:#fff;
+    --color-text-secondary:#aaa;
+    --color-text-tertiary:#777;
+    --color-border-primary:#444;
+    --color-border-secondary:#333;
+    --color-border-tertiary:#222;
+    --border-radius-md:8px;
+    --border-radius-lg:12px;
+  }
+  body{background-color:var(--color-background-primary);color:var(--color-text-primary)}
+  *{box-sizing:border-box;margin:0;padding:0}
+  .wrap{font-family:'DM Sans',sans-serif;padding:2rem 1.25rem;max-width:520px;margin:0 auto}
+  .title{font-family:'DM Mono',monospace;font-size:14px;letter-spacing:0.14em;text-transform:uppercase;color:var(--color-text-primary);margin-bottom:1.75rem;text-align:center;display:block}
+  .beam-frame{border:1px solid #fff;border-radius:var(--border-radius-lg);padding:8px;margin-bottom:1.75rem;margin-left:-0.5rem;margin-right:-0.5rem;display:flex;flex-direction:column;gap:8px}
+  .beam-viz{width:100%;height:140px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);overflow:hidden}
+  .dim-field input[type=number]::-webkit-inner-spin-button,
+  .dim-field input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+  .dim-field input[type=number]{-moz-appearance:textfield;font-size:15px!important;text-align:center}
+  .dim-field .field-label{font-size:9px!important;margin-bottom:3px!important;text-align:center;width:100%}
+  .dim-field .field-inner{justify-content:center}
+  .dim-field .field input{font-size:15px!important;min-width:60px!important;text-align:center}
+  .dim-field .angle-note{text-align:center}
+  .dim-field{padding:8px 4px!important;text-align:center}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+  .field{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:14px 16px;transition:border-color 0.15s}
+  .field:focus-within{border-color:var(--color-border-primary)}
+  .field-label{font-size:11px;color:var(--color-text-secondary);letter-spacing:0.06em;margin-bottom:6px;font-family:'DM Mono',monospace;text-transform:uppercase}
+  .field-inner{display:flex;align-items:baseline;gap:4px}
+  .field input{font-family:'DM Mono',monospace;font-size:22px;font-weight:400;color:var(--color-text-primary);background:none;border:none;outline:none;width:100%;min-width:0}
+  .field-unit{font-size:12px;color:var(--color-text-tertiary);font-family:'DM Mono',monospace;white-space:nowrap}
+  .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+  .row:last-child{border-bottom:none}
+  .row-label{font-size:13px;color:var(--color-text-secondary)}
+  .row-val{font-family:'DM Mono',monospace;font-size:13px;color:var(--color-text-primary)}
+  .section-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--color-text-secondary);margin-bottom:1rem;margin-top:1.5rem;display:flex;align-items:center;gap:10px}
+  .section-label::after{content:'';flex:1;height:0.5px;background:var(--color-border-tertiary)}
+  .angle-note{font-size:11px;color:var(--color-text-tertiary);font-family:'DM Mono',monospace;margin-top:6px;padding:0 2px}
+  .full{grid-column:1/-1}
+  .btn{width:100%;margin-top:8px;padding:8px 14px;font-family:'DM Mono',monospace;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-text-primary);background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);cursor:pointer;transition:background 0.15s,border-color 0.15s}
+  .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .btn:hover{background:var(--color-background-secondary);border-color:var(--color-border-primary)}
+  .btn:active{transform:scale(0.99)}
+  .btn.primary{border-color:#ffd400;color:#ffd400}
+  .btn.primary:hover{background:rgba(255,212,0,0.05)}
+  .btn:disabled{opacity:0.35;cursor:not-allowed}
+  .merge-panel{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:14px 16px;margin-bottom:12px;display:none}
+  .merge-panel.visible{display:block}
+  .merge-slider-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .merge-slider-row input[type=range]{flex:1;accent-color:#ffd400}
+  .merge-slider-val{font-family:'DM Mono',monospace;font-size:12px;color:#ffd400;min-width:42px;text-align:right}
+  .merge-step-btn{background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:4px;color:var(--color-text-primary);font-size:14px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;padding:0;line-height:1}
+  .merge-step-btn:hover{border-color:var(--color-border-primary);background:var(--color-background-secondary)}
+  .merge-count{font-family:'DM Mono',monospace;font-size:11px;color:#aaa;margin-top:4px}
+  .flag-warn{color:#ffaa00}
+  .flag-ok{color:#33cc55}
+  .kerf-table-wrap{margin-top:1.5rem;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);overflow:hidden;display:none}
+  .kerf-table-wrap.visible{display:block}
+  .kerf-table{width:100%;border-collapse:collapse;font-family:'DM Mono',monospace;font-size:12px}
+  .kerf-table thead tr{background:var(--color-background-secondary)}
+  .kerf-table th{padding:9px 14px;text-align:left;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:400;border-bottom:0.5px solid var(--color-border-tertiary)}
+  .kerf-table td{padding:7px 14px;color:var(--color-text-primary);border-bottom:0.5px solid var(--color-border-tertiary)}
+  .kerf-table tr:last-child td{border-bottom:none}
+  .drop-zone{width:100%;min-height:60px;border:0.5px dashed var(--color-border-secondary);border-radius:var(--border-radius-lg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;transition:background 0.15s,border-color 0.15s;background:var(--color-background-secondary);position:relative;margin-left:2rem;margin-right:2rem;width:calc(100% - 4rem)}
+  .drop-zone:hover,.drop-zone.dragover{background:var(--color-background-primary);border-color:var(--color-border-primary)}
+  .drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .drop-icon{width:28px;height:28px;opacity:0.35}
+  .drop-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.06em;color:var(--color-text-secondary);text-align:center}
+  .drop-sub{font-size:11px;color:var(--color-text-tertiary);font-family:'DM Mono',monospace}
+  .svg-preview{width:100%;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;display:none;margin-top:12px}
+  .svg-preview.visible{display:block}
+  .svg-preview-inner{width:100%;height:220px;display:flex;align-items:center;justify-content:center;padding:16px}
+  .svg-preview-inner svg{max-width:100%;max-height:100%;width:auto;height:auto}
+  .svg-meta{padding:10px 16px;border-top:0.5px solid var(--color-border-tertiary);display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  .svg-meta-item{font-family:'DM Mono',monospace;font-size:11px;color:var(--color-text-secondary)}
+  .svg-meta-item span{color:var(--color-text-primary)}
+  .clear-btn{margin-left:auto;font-family:'DM Mono',monospace;font-size:11px;color:var(--color-text-tertiary);background:none;border:none;cursor:pointer;padding:0}
+  .clear-btn:hover{color:var(--color-text-primary)}
+  .result-preview{width:100%;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;display:none;margin-top:12px}
+  .result-preview.visible{display:block}
+  .result-preview-inner{width:100%;height:280px;display:flex;align-items:center;justify-content:center;padding:16px}
+  .result-preview-inner svg{max-width:100%;max-height:100%;width:auto;height:auto}
+  .result-meta{padding:10px 16px;border-top:0.5px solid var(--color-border-tertiary);display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  .result-meta-item{font-family:'DM Mono',monospace;font-size:11px;color:var(--color-text-secondary)}
+  .result-meta-item span{color:var(--color-text-primary)}
+  .legend{display:flex;gap:16px;margin-top:10px}
+  .legend-item{display:flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:11px;color:var(--color-text-secondary)}
+  .legend-swatch{width:18px;height:1.5px;border-radius:1px}
+  .status{font-family:'DM Mono',monospace;font-size:11px;color:var(--color-text-tertiary);margin-top:8px;min-height:16px}
+  .status.error{color:#ff5555}
+  .status.ok{color:#55cc77}
+
+  /* ── PORTRAIT: .ls-shell is just a normal block, .ls-right hidden ── */
+  .ls-shell{display:block;min-height:100vh}
+  .ls-left{display:block}
+  .ls-left-inner{font-family:'DM Sans',sans-serif;padding:2rem 1.25rem;max-width:520px;margin:0 auto}
+  .ls-right{display:none}
+  .portrait-only{display:block}
+  .landscape-only{display:none}
+  .portrait-only-hide{display:none}
+
+
+  /* portrait dims: stack as original 2-col grid */
+  .dims-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+  .dim-field:nth-child(3){grid-column:1/-1}
+
+  /* ── LANDSCAPE >= 700px ── */
+  @media (min-width:700px){
+    html,body{height:100%;overflow:hidden}
+    .ls-shell{display:flex;flex-direction:row;height:100vh;overflow:hidden}
+    .ls-left{width:320px;min-width:260px;max-width:360px;flex-shrink:0;height:100vh;overflow-y:auto;overflow-x:hidden;border-right:0.5px solid var(--color-border-tertiary);background:var(--color-background-primary)}
+    .ls-left-inner{padding:1.25rem 1rem 120px 1rem;max-width:none;margin:0}
+    .dims-row{grid-template-columns:1fr 1fr 1fr}
+    .dim-field:nth-child(3){grid-column:auto}
+    .dims-row .field input{font-size:16px}
+    .dims-row .angle-note{font-size:9px}
+    .landscape-hide{display:none}
+    .portrait-only{display:none!important}
+    .portrait-only-hide{display:block}
+    .landscape-only{display:block}
+    .ls-left .beam-viz{height:100px}
+    .ls-left .beam-frame{margin-bottom:1rem}
+    .ls-left .title{margin-bottom:1rem;font-size:12px}
+    .ls-right{display:flex;flex-direction:column;flex:1;min-width:0;height:100vh;overflow:hidden;background:var(--color-background-secondary)}
+    .ls-right-footer{display:flex!important;align-items:center;justify-content:space-between;padding:8px 16px;border-top:0.5px solid var(--color-border-tertiary);flex-shrink:0}
+    .ls-right-footer .legend{margin:0}
+  }
+
+  /* ── VIEWBOX SHELL ── */
+  .vb-shell{position:relative;flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;background:var(--color-background-secondary)}
+  .vb-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;pointer-events:none;z-index:1;transition:opacity 0.2s}
+  .vb-empty.hidden{opacity:0;pointer-events:none}
+  .vb-stage{position:absolute;inset:0;transform-origin:0 0;cursor:grab;user-select:none;-webkit-user-select:none}
+  .vb-stage.grabbing{cursor:grabbing}
+  .vb-stage svg{display:block}
+  .vb-controls{position:absolute;top:10px;right:10px;display:flex;align-items:center;gap:8px;z-index:10}
+  .vb-btn{width:30px;height:30px;background:rgba(0,0,0,0.55);border:0.5px solid var(--color-border-secondary);border-radius:6px;color:var(--color-text-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background 0.15s,border-color 0.15s}
+  .vb-btn:hover{background:rgba(0,0,0,0.8);border-color:var(--color-border-primary);color:#fff}
+  .vb-zoom-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--color-text-tertiary);background:rgba(0,0,0,0.55);border:0.5px solid var(--color-border-tertiary);border-radius:6px;padding:5px 8px;min-width:44px;text-align:center;pointer-events:none}
+  .vb-meta{position:absolute;bottom:0;left:0;right:0;padding:8px 14px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:0.5px solid var(--color-border-tertiary);display:flex;gap:14px;flex-wrap:wrap;align-items:center;z-index:10}
+  .vb-meta .clear-btn{margin-left:auto}
+
+  /* download path checkboxes */
+  .dl-path-checks{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .dl-check-label{display:flex;align-items:center;gap:6px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;color:var(--color-text-secondary);user-select:none}
+  .dl-check-label input[type=checkbox]{width:13px;height:13px;cursor:pointer;accent-color:var(--color-accent-primary)}
+  .dl-swatch{display:inline-block;width:10px;height:10px;border-radius:2px;flex-shrink:0}
+  @media (min-width:700px){
+    .ls-right-footer{
+      flex-direction:column;
+      align-items:stretch;
+      gap:10px;
+      padding:10px 16px;
+    }
+    .ls-right-footer .legend{margin:0}
+    .ls-right-footer-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .dl-path-checks{
+      padding-top:6px;
+      border-top:0.5px solid var(--color-border-tertiary);
+      gap:16px;
+    }
+
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ LANDSCAPE LAYOUT SHELL ═══════════════════════════════════════════ -->
+<div class="ls-shell">
+
+  <!-- ── LEFT PANEL ── -->
+  <div class="ls-left" id="ls-left">
+    <div class="ls-left-inner">
+
+      <div class="title">oval kerf offset</div>
+
+      <!-- 1+2. Beam diagram + dims inside white frame -->
+      <div class="beam-frame">
+        <div class="beam-viz">
+          <svg id="viz" viewBox="0 0 420 130" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"></svg>
+        </div>
+
+        <!-- Beam preset selector — compact inline -->
+        <div style="margin-bottom:6px">
+          <select id="beam-preset" style="padding:2px 4px;border:none;background:transparent;color:inherit;font-size:inherit;cursor:pointer;text-align:left">
+          </select>
+        </div>
+
+        <!-- Width / Height / Diagonal -->
+        <div class="dims-row" style="margin-bottom:0">
+          <div class="field dim-field">
+            <div class="field-label">Width mm</div>
+            <div class="field-inner">
+              <input type="number" id="bw" value="0.2" min="0.1" step="0.1">
+            </div>
+          </div>
+          <div class="field dim-field">
+            <div class="field-label">Height mm</div>
+            <div class="field-inner">
+              <input type="number" id="bh" value="0.1" min="0.1" step="0.1">
+            </div>
+          </div>
+          <div class="field dim-field">
+            <div class="field-label">Diagonal mm</div>
+            <div class="field-inner">
+              <input type="number" id="bd" value="0.18" min="0.1" step="0.1">
+            </div>
+            <div class="angle-note landscape-hide" id="angle-note">at 27°</div>
+          </div>
+        </div>
+      </div><!-- /beam-frame -->
+
+      <!-- 3. Curve resolution + curve degrees -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="field dim-field">
+          <div class="field-label">Curve resolution</div>
+          <div class="field-inner">
+            <input type="number" id="curve-res" value="0.3" min="0.01" step="0.01">
+          </div>
+          <div class="angle-note">max node spacing</div>
+        </div>
+        <div class="field dim-field">
+          <div class="field-label">Curve degrees</div>
+          <div class="field-inner">
+            <input type="number" id="curve-deg" value="10" min="1" max="90" step="1">
+          </div>
+          <div class="angle-note">max angle per node</div>
+        </div>
+      </div>
+
+      <!-- PORTRAIT-ONLY: derived values, compute, kerf table -->
+      <div class="portrait-only">
+        <div class="section-label">derived values</div>
+        <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:6px 16px">
+          <div class="row"><span class="row-label">Kerf radius H</span><span class="row-val" id="rkh">—</span></div>
+          <div class="row"><span class="row-label">Kerf radius V</span><span class="row-val" id="rkv">—</span></div>
+          <div class="row"><span class="row-label">Diagonal angle</span><span class="row-val" id="rang">—</span></div>
+          <div class="row"><span class="row-label">Superellipse n</span><span class="row-val" id="rn">—</span></div>
+          <div class="row"><span class="row-label">Aspect ratio</span><span class="row-val" id="rasp">—</span></div>
+        </div>
+        <button class="btn" id="compute-btn">compute kerf table</button>
+        <div class="section-label" id="offset-label" style="display:none">kerf offset by angle</div>
+        <div class="kerf-table-wrap" id="kerf-table-wrap">
+          <table class="kerf-table">
+            <thead><tr><th>Angle</th><th>Offset (mm)</th></tr></thead>
+            <tbody id="kerf-tbody"></tbody>
+          </table>
+        </div>
+        <div class="section-label">cut path import</div>
+      </div>
+
+      <!-- 4. Drop SVG zone -->
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="svg-file" accept=".svg,image/svg+xml">
+        <svg class="drop-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 4v12m0-12L8 8m4-4l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 17v1a2 2 0 002 2h12a2 2 0 002-2v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span class="drop-label">Drop SVG / Click to browse</span>
+      </div>
+
+      <!-- 5. Merge nodes slider (conditional) -->
+      <div class="merge-panel" id="merge-panel">
+        <div class="field-label" style="margin-bottom:10px">merge nearby nodes</div>
+        <div class="merge-slider-row">
+          <button class="merge-step-btn" id="merge-minus" tabindex="-1">−</button>
+          <input type="range" id="merge-slider" min="0" max="0.5" step="0.005" value="0">
+          <button class="merge-step-btn" id="merge-plus" tabindex="-1">+</button>
+          <span class="merge-slider-val" id="merge-slider-val">0.00mm</span>
+        </div>
+        <div class="merge-count" id="merge-count"></div>
+      </div>
+
+      <!-- PORTRAIT-ONLY: svg-preview shown inline below drop zone -->
+      <div class="portrait-only">
+        <div class="svg-preview" id="svg-preview-portrait">
+          <div class="svg-preview-inner" id="svg-preview-inner-portrait"></div>
+          <div class="svg-meta">
+            <div class="svg-meta-item">viewBox: <span id="meta-vb-portrait">—</span></div>
+            <div class="svg-meta-item">paths: <span id="meta-paths-portrait">—</span></div>
+            <button class="clear-btn" id="clear-btn-portrait">clear ×</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6–8. Action buttons -->
+      <button class="btn primary" id="trace-btn" disabled>trace kerf offset</button>
+      <button class="btn" id="remove-loops-btn" disabled>remove inner corner loops</button>
+      <button class="btn" id="remove-curve-loops-btn" disabled>remove curve loops</button>
+      <div class="btn-row">
+        <button class="btn" id="sharp-corners-btn" disabled style="margin-top:0">sharp corners</button>
+        <button class="btn" id="blunt-corners-btn" disabled style="margin-top:0">blunt corners</button>
+      </div>
+
+      <!-- 9. Status -->
+      <div class="status" id="status"></div>
+
+      <!-- 10. Landscape: legend, checkboxes, download (hidden in portrait) -->
+      <div class="portrait-only-hide">
+        <div class="legend" id="legend" style="margin-top:12px;display:none">
+          <div class="legend-item"><div class="legend-swatch" style="background:#555"></div>original</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:#ff3333"></div>inner</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:#33cc55"></div>outer</div>
+        </div>
+        <div class="dl-path-checks" id="dl-path-checks" style="display:none;flex-direction:column;gap:8px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px 16px;margin-top:12px;margin-bottom:0">
+          <label class="dl-check-label"><input type="checkbox" id="dl-inner"    checked><span class="dl-swatch" style="background:#ff3333"></span>red path</label>
+          <label class="dl-check-label"><input type="checkbox" id="dl-original" checked><span class="dl-swatch" style="background:#555"></span>original</label>
+          <label class="dl-check-label"><input type="checkbox" id="dl-outer"    checked><span class="dl-swatch" style="background:#33cc55"></span>green path</label>
+        </div>
+        <button class="btn" id="download-btn" style="margin-top:8px;display:none">download svg</button>
+      </div>
+
+      <!-- PORTRAIT-ONLY: result preview, legend, download, debug panels -->
+      <div class="portrait-only">
+        <div class="result-preview" id="result-preview-portrait">
+          <div class="result-preview-inner" id="result-preview-inner-portrait"></div>
+          <div class="result-meta">
+            <div class="result-meta-item">paths: <span id="meta-rpaths-portrait">—</span></div>
+            <div class="result-meta-item">samples: <span id="meta-rsamples-portrait">—</span></div>
+          </div>
+        </div>
+
+        <div class="legend" id="legend-portrait" style="display:none">
+          <div class="legend-item"><div class="legend-swatch" style="background:#555"></div>original</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:#ff3333"></div>inner</div>
+          <div class="legend-item"><div class="legend-swatch" style="background:#33cc55"></div>outer</div>
+        </div>
+        <div class="dl-path-checks" id="dl-path-checks-portrait" style="display:none;margin-top:10px">
+          <label class="dl-check-label"><input type="checkbox" id="dl-inner-portrait"    checked><span class="dl-swatch" style="background:#ff3333"></span>red path</label>
+          <label class="dl-check-label"><input type="checkbox" id="dl-original-portrait" checked><span class="dl-swatch" style="background:#555"></span>original</label>
+          <label class="dl-check-label"><input type="checkbox" id="dl-outer-portrait"    checked><span class="dl-swatch" style="background:#33cc55"></span>green path</label>
+        </div>
+        <button class="btn" id="download-btn-portrait" style="display:none">download offset svg</button>
+        <button class="btn" id="cmrom-debug-btn" style="display:none;margin-top:8px">show cmrom debug</button>
+        <div class="section-label" id="cmrom-debug-label" style="display:none">catmull-rom debug</div>
+        <div id="cmrom-debug-panel" style="display:none;width:100%;background:#0a0a0a;border:0.5px solid #222;border-radius:8px;overflow:hidden">
+          <div style="padding:8px 12px;border-bottom:0.5px solid #222;display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+            <label style="font-family:DM Mono,monospace;font-size:11px;color:#aaa;display:flex;align-items:center;gap:5px"><input type="checkbox" id="cmr-show-phantom" checked> phantoms</label>
+            <label style="font-family:DM Mono,monospace;font-size:11px;color:#aaa;display:flex;align-items:center;gap:5px"><input type="checkbox" id="cmr-show-cp" checked> control pts</label>
+            <label style="font-family:DM Mono,monospace;font-size:11px;color:#aaa;display:flex;align-items:center;gap:5px"><input type="checkbox" id="cmr-show-pts" checked> run pts</label>
+            <label style="font-family:DM Mono,monospace;font-size:11px;color:#aaa;display:flex;align-items:center;gap:5px"><input type="checkbox" id="cmr-show-curve" checked> curve</label>
+            <span style="margin-left:auto;display:flex;align-items:center;gap:6px">
+              <button id="cmr-prev" style="font-family:DM Mono,monospace;font-size:11px;background:none;border:0.5px solid #333;color:#aaa;padding:2px 8px;border-radius:4px;cursor:pointer">prev</button>
+              <span id="cmr-run-label" style="font-family:DM Mono,monospace;font-size:11px;color:#aaa">run 0/0</span>
+              <button id="cmr-next" style="font-family:DM Mono,monospace;font-size:11px;background:none;border:0.5px solid #333;color:#aaa;padding:2px 8px;border-radius:4px;cursor:pointer">next</button>
+            </span>
+          </div>
+          <svg id="cmrom-svg" viewBox="0 0 340 280" style="width:100%;height:280px;display:block"></svg>
+          <div id="cmr-info" style="padding:8px 12px;font-family:DM Mono,monospace;font-size:10px;color:#666;line-height:1.6;white-space:pre;border-top:0.5px solid #111"></div>
+          <div style="border-top:0.5px solid #222;padding:8px 12px">
+            <div style="font-family:DM Mono,monospace;font-size:10px;color:#888;margin-bottom:6px">node tangent error (spline tangent vs correct offset normal)</div>
+            <div id="cmr-node-table" style="font-family:DM Mono,monospace;font-size:10px;color:#666;line-height:1.8;white-space:pre"></div>
+          </div>
+        </div>
+        <div class="section-label" id="debug-label" style="display:none">debug log</div>
+        <textarea id="debug-log" style="display:none;width:100%;height:320px;background:#0a0a0a;color:#0f0;font-family:'DM Mono',monospace;font-size:10px;border:0.5px solid #222;border-radius:8px;padding:12px;resize:vertical;white-space:pre;overflow:auto" readonly></textarea>
+      </div>
+
+    </div><!-- /ls-left-inner -->
+  </div><!-- /ls-left -->
+
+  <!-- ── RIGHT PANEL (landscape viewbox) ── -->
+  <div class="ls-right" id="ls-right">
+
+    <!-- unified zoomable viewbox -->
+    <div class="vb-shell" id="vb-shell">
+
+      <!-- empty state -->
+      <div class="vb-empty" id="vb-empty">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style="opacity:0.2">
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M3 9h18M9 21V9" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+        <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--color-text-tertiary);letter-spacing:0.08em">drop an svg to begin</span>
+      </div>
+
+      <!-- the pan/zoom stage -->
+      <div class="vb-stage" id="vb-stage">
+        <!-- SVG content injected here by JS -->
+      </div>
+
+      <!-- overlay controls -->
+      <div class="vb-controls">
+        <button class="vb-btn" id="vb-fit-btn" title="fit to view">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M16 21h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
+          </svg>
+        </button>
+        <div class="vb-zoom-label" id="vb-zoom-label">100%</div>
+      </div>
+
+      <!-- meta bar at bottom -->
+      <div class="vb-meta" id="vb-meta" style="display:none">
+        <div class="svg-meta-item" id="vb-meta-vb">viewBox: <span>—</span></div>
+        <div class="svg-meta-item" id="vb-meta-paths">paths: <span>—</span></div>
+        <button class="clear-btn" id="clear-btn">clear ×</button>
+        <div class="svg-meta-item" id="vb-meta-result" style="display:none">samples: <span id="meta-rsamples">—</span></div>
+        <div class="svg-meta-item" id="vb-meta-rpaths" style="display:none">out paths: <span id="meta-rpaths">—</span></div>
+      </div>
+
+    </div><!-- /vb-shell -->
+
+
+
+  </div><!-- /ls-right -->
+
+</div><!-- /ls-shell -->
+
+<!-- ── PORTRAIT WRAP (hidden in landscape) ── -->
+<!-- All portrait-only elements live inside .ls-left/.portrait-only above.
+     The .wrap div is kept for JS that references it, but empty. -->
+<div class="wrap" style="display:none" aria-hidden="true"></div>
+<script>
+
+/* ═══════════════════════════════════════════════════════
+   GLOBAL STATE
+   All shared data lives here — no need to pass between functions
+════════════════════════════════════════════════════════ */
+
+// Beam inputs
+let gBeamW, gBeamH, gBeamD;
+let gKx, gKy, gKd;
+const MM_PER_USER_UNIT = 0.2646; // 1 SVG user unit = 0.2646 mm (96dpi: 25.4/96)
+let gSuperellipseN;
+
+// SVG file state
+let gLoadedSVGDoc  = null;
+let gLoadedViewBox = null;
+let gOutputSVGText = '';
+
+// Stored path data (set during traceKerfOffset, used by later steps)
+let gStoredOriginal    = [];
+let gStoredViewBox     = null;
+let gStoredSW          = 0;
+let gStoredNodesArrays = [];
+let gStoredTable       = null;
+let gStoredInnerArrays = [];
+let gStoredOuterArrays = [];
+
+// Cleaned path data (set after removeLoops, used by corner functions)
+let gCleanedInnerArrays = [];
+let gCleanedOuterArrays = [];
+
+// Winding direction per path (true = CW / left-is-outer, false = CCW)
+let gStoredWindings = [];
+
+// Debug log lines
+let gDebugLines = [];
+
+// Crossing points collected during curve-loop removal — rendered as white dots
+let gDebugCrossingPts = [];
+
+// ── NODE DOT OVERLAY APPEARANCE ───────────────────────────────────────────
+// Radius of node dot overlays as a fraction of the larger SVG dimension.
+// Applied to both the import preview (merge overlay) and the result preview.
+// e.g. 0.004 on a 500×500 viewBox → r = 2px
+const NODE_DOT_RADIUS_FRACTION = 0.004;
+
+// Colour of node dots in the result preview (the yellow node markers shown
+// over the offset paths after tracing).
+const NODE_DOT_COLOR_RESULT = '#ffffff';
+
+// Colours of node dots in the import preview merge overlay.
+// DOT_MERGE_ACTIVE  — node that WILL be merged at the current slider threshold.
+// DOT_MERGE_NEARBY  — node that is close but below the current threshold.
+const NODE_DOT_COLOR_MERGE_ACTIVE = '#ffffff';
+const NODE_DOT_COLOR_MERGE_NEARBY = '#ffffff';
+
+
+/* ═══════════════════════════════════════════════════════
+   APPLICATION FLOW
+   The full story of the app in one place.
+   All function definitions follow below.
+════════════════════════════════════════════════════════ */
+
+// ── PAGE LOAD ──────────────────────────────────────────────────────────────
+//   drawBeam()                  Task 3  — read inputs, draw superellipse preview
+//   setupEventListeners()       Task 19 — wire all buttons and inputs
+//
+// ── BEAM INPUT CHANGE ─────────────────────────────────────────────────────
+//   drawBeam()                  Task 3  — redraw preview, hide kerf table
+//
+// ── COMPUTE BUTTON ────────────────────────────────────────────────────────
+//   computeKerfOffset()         Task 4  — build tangent table, show offset table in UI
+//
+// ── SVG FILE DROP / PICK ──────────────────────────────────────────────────
+//   loadSVG()                   Task 5  — read file, parse SVG, show preview panel
+//
+// ── TRACE BUTTON ──────────────────────────────────────────────────────────
+//   traceKerfOffset()           Task 10 — full offset pipeline:
+//     readBeamInputs()          Task 3a —   parse beam width / height / diagonal
+//     buildTangentTable()       Task 2  —   build 360-entry beam-edge lookup
+//     resetOffsetArrays()       Task 10a —  clear stored results from previous run
+//     processAllPaths()         Task 10b —  for each SVG path:
+//       processOnePath()        Task 10f —    parse → classify → offset → crossings
+//     storeSVGMetadata()        Task 10g —  store viewBox + stroke-width
+//     renderOffsetResult()      Task 10h —  build SVG string, push to preview
+//     showOffsetResultUI()      Task 10i —  update meta, enable next buttons
+//
+// ── LOOPS BUTTON ──────────────────────────────────────────────────────────
+//   removeInnerCornerLoops()    Task 12 — strip crossing loops, re-render
+//
+// ── SHARP CORNERS BUTTON ──────────────────────────────────────────────────
+//   applySharpCorners()         Task 13 — sweep arc centred on original node
+//
+// ── BLUNT CORNERS BUTTON ──────────────────────────────────────────────────
+//   applyBluntCorners()         Task 14 — sweep arc centred on internode point
+//
+// ── DOWNLOAD BUTTON ───────────────────────────────────────────────────────
+//   downloadSVG()               Task 16 — save output SVG to disk
+//
+// ── CLEAR BUTTON ──────────────────────────────────────────────────────────
+//   resetSVGState()             Task 19c-i  — clear loaded SVG globals
+//   resetClearButtonUI()        Task 19c-ii — hide panels, reset inputs
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 1 — SUPERELLIPSE MATHS HELPERS
+   Pure maths functions, inputs in → answer out.
+   No DOM access. Like static utility methods in Java.
+════════════════════════════════════════════════════════ */
+
+  // 1a — Fit superellipse exponent n so the shape passes through
+  //      the measured diagonal point
+  function fitN(kx, ky, kd) {
+    const a = Math.atan2(ky, kx);
+    const ca = kd * Math.cos(a) / kx;
+    const sa = kd * Math.sin(a) / ky;
+    if (ca >= 1 || sa >= 1 || ca <= 0 || sa <= 0) return 2;
+    let lo = 0.5, hi = 40;
+    for (let i = 0; i < 80; i++) {
+      const m = (lo + hi) / 2;
+      Math.pow(ca, m) + Math.pow(sa, m) > 1 ? lo = m : hi = m;
+    }
+    return (lo + hi) / 2;
+  }
+
+  // 1b — Array of {x,y} points tracing the superellipse outline (for drawing)
+  function superellipsePts(kx, ky, n, N) {
+    const pts = [];
+    for (let i = 0; i < N; i++) {
+      const t = (i / N) * Math.PI * 2;
+      const ct = Math.cos(t), st = Math.sin(t);
+      const r = 1 / Math.pow(Math.pow(Math.abs(ct / kx), n) + Math.pow(Math.abs(st / ky), n), 1 / n);
+      pts.push([r * ct, r * st]);
+    }
+    return pts;
+  }
+
+  // 1c — How far the beam edge sits from beam centre in direction theta
+  function superellipseRadius(kx, ky, n, theta) {
+    const ct = Math.cos(theta), st = Math.sin(theta);
+    const base = Math.pow(Math.abs(ct / kx), n) + Math.pow(Math.abs(st / ky), n);
+    if (base === 0) return 0;
+    return 1 / Math.pow(base, 1 / n);
+  }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 2 — TANGENT TABLE
+   Build and query the 360-entry lookup table.
+   Each entry: the beam-edge point whose tangent
+   is parallel to that travel direction.
+════════════════════════════════════════════════════════ */
+
+  // 2a — Master function: build the full tangent table → sets gStoredTable directly
+  function buildTangentTable(kx, ky, n_val) {
+    const table = walkSuperellipseForTable(kx, ky, n_val);
+    fillEmptyTableBuckets(table);
+    gStoredTable = table;
+  }
+
+    // 2a-i — Walk the superellipse at high resolution, fill table buckets
+    function walkSuperellipseForTable(kx, ky, n_val) {
+      const N = 7200;
+      const table    = new Array(360).fill(null);
+      const bestDist = new Array(360).fill(Infinity);
+
+      for (let i = 0; i < N; i++) {
+        const t0 = (i / N) * Math.PI * 2;
+        const t1 = ((i + 1) / N) * Math.PI * 2;
+
+        const ct0 = Math.cos(t0), st0 = Math.sin(t0);
+        const r0  = 1 / Math.pow(Math.pow(Math.abs(ct0/kx), n_val) + Math.pow(Math.abs(st0/ky), n_val), 1/n_val);
+        const x0  = r0 * ct0, y0 = r0 * st0;
+
+        const ct1 = Math.cos(t1), st1 = Math.sin(t1);
+        const r1  = 1 / Math.pow(Math.pow(Math.abs(ct1/kx), n_val) + Math.pow(Math.abs(st1/ky), n_val), 1/n_val);
+        const x1  = r1 * ct1, y1 = r1 * st1;
+
+        let tDeg = Math.atan2(y1 - y0, x1 - x0) * 180 / Math.PI;
+        if (tDeg < 0) tDeg += 360;
+
+        const mx = (x0 + x1) / 2;
+        const my = (y0 + y1) / 2;
+
+        const bucket = Math.round(tDeg) % 360;
+        const dist   = Math.abs(tDeg - bucket);
+        if (dist < bestDist[bucket]) {
+          bestDist[bucket] = dist;
+          table[bucket] = { x: mx, y: my };
+        }
+      }
+      return table;
+    }
+
+    // 2a-ii — Fill any empty buckets by interpolating from neighbours
+    function fillEmptyTableBuckets(table) {
+      for (let pass = 0; pass < 2; pass++) {
+        for (let d = 0; d < 360; d++) {
+          if (!table[d]) {
+            const prev = table[(d - 1 + 360) % 360];
+            const next = table[(d + 1) % 360];
+            if (prev && next) table[d] = { x: (prev.x + next.x) / 2, y: (prev.y + next.y) / 2 };
+            else if (prev)    table[d] = { ...prev };
+            else if (next)    table[d] = { ...next };
+          }
+        }
+      }
+    }
+
+  // 2b — Look up by travel angle → {x, y} offset from beam centre
+  function tangentTableLookup(table, travelAngle) {
+    let deg = Math.round(travelAngle * 180 / Math.PI) % 360;
+    if (deg < 0) deg += 360;
+    return table[deg];
+  }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 3 — BEAM SHAPE VISUALISER
+   Reads inputs, updates derived values panel, draws SVG.
+════════════════════════════════════════════════════════ */
+
+  // 3 — Master draw function (called on load and on input change)
+  function drawBeam() {
+    readBeamInputs();
+    updateDerivedValuesPanel();
+    drawBeamSVG();
+  }
+
+    // 3a — Read width/height/diagonal from inputs → set globals
+    function readBeamInputs() {
+      gBeamW = parseFloat(document.getElementById('bw').value) || 4;
+      gBeamH = parseFloat(document.getElementById('bh').value) || 2;
+      gBeamD = parseFloat(document.getElementById('bd').value) || 3.6;
+      gKx = (gBeamW / 2) / MM_PER_USER_UNIT;
+      gKy = (gBeamH / 2) / MM_PER_USER_UNIT;
+      gKd = (gBeamD / 2) / MM_PER_USER_UNIT;
+      gSuperellipseN = fitN(gKx, gKy, gKd);
+      const maxD = Math.sqrt(gBeamW * gBeamW + gBeamH * gBeamH);
+      const bdInput = document.getElementById('bd');
+      bdInput.style.color = (gBeamD >= maxD * 0.95 || gBeamD <= maxD * 0.55) ? '#ff4444' : '';
+    }
+
+    // 3b — Update the derived values panel in the UI
+    function updateDerivedValuesPanel() {
+      const alpha    = Math.atan2(gKy, gKx);
+      const alphaDeg = alpha * 180 / Math.PI;
+      document.getElementById('rkh').textContent       = '±' + (gBeamW / 2).toFixed(3) + ' mm';
+      document.getElementById('rkv').textContent       = '±' + (gBeamH / 2).toFixed(3) + ' mm';
+      document.getElementById('rang').textContent      = alphaDeg.toFixed(1) + '°';
+      document.getElementById('rn').textContent        = gSuperellipseN.toFixed(3);
+      document.getElementById('rasp').textContent      = (gBeamW / gBeamH).toFixed(2) + ':1';
+      document.getElementById('angle-note').textContent = 'at 45° — cut a line at 45° and measure the burn width';
+    }
+
+    // 3c — Draw the superellipse shape into the beam SVG preview
+    function drawBeamSVG() {
+      const svg = document.getElementById('viz');
+      const W = 420, H = 130, cx = W / 2, cy = H / 2;
+      const scale = Math.min((cx - 32) / gKx, (cy - 20) / gKy);
+      const alpha = Math.atan2(gKy, gKx);
+      const pts   = superellipsePts(gKx, gKy, gSuperellipseN, 200);
+      const path  = pts.map((p, i) => (i ? 'L' : 'M') + (cx + p[0] * scale).toFixed(2) + ' ' + (cy - p[1] * scale).toFixed(2)).join(' ') + 'Z';
+      const ex = cx + gKx * scale, ey = cy - gKy * scale;
+      const dx = cx + Math.cos(alpha) * gKd * scale, dy = cy - Math.sin(alpha) * gKd * scale;
+
+      svg.innerHTML = `
+        <line x1="${cx-gKx*scale-12}" y1="${cy}" x2="${cx+gKx*scale+12}" y2="${cy}" stroke="#ffd400" stroke-width="0.5"/>
+        <line x1="${cx}" y1="${cy-gKy*scale-10}" x2="${cx}" y2="${cy+gKy*scale+10}" stroke="#ffd400" stroke-width="0.5"/>
+        <ellipse cx="${cx}" cy="${cy}" rx="${gKx*scale}" ry="${gKy*scale}" fill="none" stroke="#ffd400" stroke-width="0.75" stroke-dasharray="3 3"/>
+        <path d="${path}" fill="rgba(255,212,0,0.06)" stroke="#ffd400" stroke-width="1.5" stroke-linejoin="round"/>
+        <line x1="${cx}" y1="${cy}" x2="${dx}" y2="${dy}" stroke="#ffd400" stroke-width="0.75" stroke-dasharray="2 2"/>
+        <circle cx="${ex}" cy="${cy}" r="2.5" fill="#ffd400"/>
+        <circle cx="${cx}" cy="${ey}" r="2.5" fill="#ffd400"/>
+        <circle cx="${dx}" cy="${dy}" r="2.5" fill="#ffd400"/>
+        <text x="${ex+4}" y="${cy-5}" font-size="10" font-family="DM Mono,monospace" fill="#555">${gBeamW.toFixed(1)}</text>
+        <text x="${cx+4}" y="${ey-4}" font-size="10" font-family="DM Mono,monospace" fill="#555">${gBeamH.toFixed(1)}</text>
+        <text x="${dx+4}" y="${dy-4}" font-size="10" font-family="DM Mono,monospace" fill="#555">${gBeamD.toFixed(1)}</text>
+      `;
+    }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 4 — KERF TABLE
+   Computes and displays the 360-row offset table in the UI.
+════════════════════════════════════════════════════════ */
+
+  // 4 — Master function: compute and display kerf table
+  function computeKerfOffset() {
+    readBeamInputs();
+    buildTangentTable(gKx, gKy, gSuperellipseN);
+    populateKerfTableUI();
+    showKerfTableUI();
+  }
+
+    // 4a — Fill the table rows with angle → offset values
+    function populateKerfTableUI() {
+      const tbody = document.getElementById('kerf-tbody');
+      tbody.innerHTML = '';
+      for (let deg = 0; deg < 360; deg++) {
+        const theta = deg * Math.PI / 180;
+        const pt    = tangentTableLookup(gStoredTable, theta);
+        const r     = Math.hypot(pt.x, pt.y);
+        const tr    = document.createElement('tr');
+        tr.innerHTML = `<td>${deg}°</td><td>${r.toFixed(4)}</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
+    // 4b — Show the table and its section label
+    function showKerfTableUI() {
+      document.getElementById('kerf-table-wrap').classList.add('visible');
+      document.getElementById('offset-label').style.display = 'flex';
+    }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 5 — SVG FILE IMPORT
+   Load an SVG file from disk and show it in the preview panel.
+════════════════════════════════════════════════════════ */
+
+  // 5 — Master function: load SVG file
+  function loadSVG(file) {
+    if (!isValidSVGFile(file)) return;
+    readSVGFile(file);
+  }
+
+    // 5a — Check the file is a valid .svg
+    function isValidSVGFile(file) {
+      return file && file.name.toLowerCase().endsWith('.svg');
+    }
+
+    // 5b — Read file from disk, then parse and preview it
+    function readSVGFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        parseSVGDocument(e.target.result);
+        showSVGPreview();
+      };
+      reader.readAsText(file);
+    }
+
+      // 5b-i — Parse SVG text → set gLoadedSVGDoc and gLoadedViewBox
+      function parseSVGDocument(svgText) {
+        const doc   = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+        const svgEl = doc.querySelector('svg');
+        if (!svgEl) return;
+        gLoadedSVGDoc  = doc;
+        gLoadedViewBox = svgEl.getAttribute('viewBox') || null;
+        markInvalidPaths();
+      }
+
+      // 5b-i-a — Detect invalid paths (single segment or unjoined), colour them
+      //          orange in the master doc and tag with data-invalid so download strips them
+      function markInvalidPaths() {
+        if (!gLoadedSVGDoc) return;
+        let count = 0;
+        gLoadedSVGDoc.querySelectorAll('path').forEach(pathEl => {
+          const d    = pathEl.getAttribute('d') || '';
+          const segs = parsePathSegments(d);
+          let invalid = false;
+          if (segs.length < 2) {
+            invalid = true;
+          } else {
+            const first = segs[0], last = segs[segs.length - 1];
+            if (Math.hypot(last.x1 - first.x0, last.y1 - first.y0) > 0.001) invalid = true;
+          }
+          if (invalid) {
+            pathEl.setAttribute('stroke', '#ff8800');
+            pathEl.setAttribute('fill', 'none');
+            pathEl.setAttribute('data-invalid', '1');
+            count++;
+          }
+        });
+        if (count > 0) {
+          alert('This SVG contains ' + count + ' single segment or open path' + (count > 1 ? 's' : '') + ' that can\'t be processed. ' + (count > 1 ? 'They are' : 'It is') + ' highlighted in orange.');
+        }
+      }
+
+      // 5b-ii — Show the loaded SVG in the preview panel
+      function showSVGPreview() {
+        if (!gLoadedSVGDoc) return;
+        const svgEl    = gLoadedSVGDoc.querySelector('svg');
+        const pathCount = gLoadedSVGDoc.querySelectorAll('path,polyline,polygon,line,rect,circle,ellipse').length;
+        const preview  = svgEl.cloneNode(true);
+        preview.removeAttribute('width');
+        preview.removeAttribute('height');
+
+        // Portrait preview
+        const pInner = document.getElementById('svg-preview-portrait');
+        const pInnerDiv = document.getElementById('svg-preview-inner-portrait');
+        if (pInner && pInnerDiv) {
+          const pClone = preview.cloneNode(true);
+          pClone.setAttribute('width','100%');
+          pClone.setAttribute('height','100%');
+          pClone.style.maxHeight = '188px';
+          pInnerDiv.innerHTML = '';
+          pInnerDiv.appendChild(pClone);
+          const mvb = document.getElementById('meta-vb-portrait');
+          const mp  = document.getElementById('meta-paths-portrait');
+          if (mvb) mvb.textContent = gLoadedViewBox || '—';
+          if (mp)  mp.textContent  = pathCount;
+          pInner.classList.add('visible');
+        }
+
+        // Landscape viewbox
+        vbShowRawSVG(preview.cloneNode(true), gLoadedViewBox, pathCount);
+
+        document.getElementById('trace-btn').disabled = false;
+        document.getElementById('status').textContent = '';
+        scanAndShowMergeWarnings();
+        overlayMergeDotsOnPreview();
+      }
+
+      // 5c — Scan all paths for close node pairs and update merge panel
+      function scanAndShowMergeWarnings() {
+        const thresh = parseFloat(document.getElementById('merge-slider').value) || 0;
+        const pathEls = gLoadedSVGDoc ? gLoadedSVGDoc.querySelectorAll('path') : [];
+        let totalIn = 0, totalOut = 0, hasAnyClose = false;
+        pathEls.forEach(pathEl => {
+          const segs = parsePathSegments(pathEl.getAttribute('d') || '');
+          if (!segs.length) return;
+          const nodes = classifyNodes(segs);
+          const pairs = scanNodeProximity(nodes, 0.5);
+          if (pairs.length) hasAnyClose = true;
+          if (thresh > 0) {
+            // Build adjacency clusters from pairs within threshold.
+            // Adjacent close nodes chain together — N nodes in a cluster → 1 node out.
+            const inCluster = new Set();
+            const parent = {};
+            function find(x) { return parent[x] === undefined ? x : (parent[x] = find(parent[x])); }
+            function union(a, b) { parent[find(a)] = find(b); }
+            pairs.forEach(p => {
+              if (p.dist < thresh) {
+                union(p.i, p.j);
+                inCluster.add(p.i);
+                inCluster.add(p.j);
+              }
+            });
+            // Count distinct clusters
+            const roots = new Set();
+            inCluster.forEach(i => roots.add(find(i)));
+            totalIn  += inCluster.size;
+            totalOut += roots.size;
+          }
+        });
+
+        const panel = document.getElementById('merge-panel');
+        const count = document.getElementById('merge-count');
+
+        if (!hasAnyClose && thresh === 0) {
+          panel.classList.remove('visible');
+          return;
+        }
+        panel.classList.add('visible');
+
+        if (thresh === 0) {
+          count.textContent = '';
+        } else if (totalIn === 0) {
+          count.textContent = 'no nodes to merge';
+        } else {
+          count.textContent = totalIn + ' nodes will merge into ' + totalOut;
+        }
+      }
+
+
+      // 5d — Overlay dots on the SVG preview for nodes that will be merged at current threshold
+      function overlayMergeDotsOnPreview() {
+        // Update landscape stage overlay
+        vbOverlayMergeDots();
+        // Update portrait inline preview
+        const inner = document.getElementById('svg-preview-inner-portrait');
+        if (!inner) return;
+        const previewSVG = inner.querySelector('svg');
+        if (!previewSVG) return;
+
+        const old = previewSVG.querySelector('#merge-overlay');
+        if (old) old.remove();
+
+        const thresh = parseFloat(document.getElementById('merge-slider').value) || 0;
+        if (!gLoadedSVGDoc) return;
+
+        const vbParts = (gLoadedViewBox || '0 0 100 100').split(/[\s,]+/).map(Number);
+        const svgW = vbParts[2] || 100, svgH = vbParts[3] || 100;
+        const dotR = Math.max(svgW, svgH) * NODE_DOT_RADIUS_FRACTION;
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('id', 'merge-overlay');
+
+        const pathEls = gLoadedSVGDoc.querySelectorAll('path');
+        pathEls.forEach(pathEl => {
+          const segs  = parsePathSegments(pathEl.getAttribute('d') || '');
+          if (!segs.length) return;
+          const nodes = classifyNodes(segs);
+          const pairs = scanNodeProximity(nodes, Math.max(thresh, 0.001));
+
+          const willMerge = new Set();
+          pairs.forEach(p => { if (p.dist < thresh) { willMerge.add(p.i); willMerge.add(p.j); } });
+
+          nodes.forEach((node, i) => {
+            const inPair  = pairs.some(p => p.i === i || p.j === i);
+            if (!inPair) return;
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', node.x);
+            circle.setAttribute('cy', node.y);
+            circle.setAttribute('r',  dotR);
+            // red = will be merged at this threshold, orange = close but not yet
+            circle.setAttribute('fill', willMerge.has(i) ? NODE_DOT_COLOR_MERGE_ACTIVE : NODE_DOT_COLOR_MERGE_NEARBY);
+            circle.setAttribute('opacity', '0.85');
+            g.appendChild(circle);
+          });
+        });
+
+        previewSVG.appendChild(g);
+      }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 6 — PATH SEGMENT PARSING
+   Break an SVG path d-attribute string into typed segments.
+   Each segment has all its control points stored explicitly.
+════════════════════════════════════════════════════════ */
+
+  // 6 — Parse SVG path d string → array of typed segment objects
+  //     L: straight line   C: cubic bezier
+  //     Q: quadratic       A: arc
+  function parsePathSegments(d) {
+    const segs = [];
+    let cx = 0, cy = 0, sx = 0, sy = 0;
+    let lastCX2 = null, lastCY2 = null;
+    let lastQCX = null, lastQCY = null;
+    const re = /([MmLlHhVvCcSsQqTtAaZz])([^MmLlHhVvCcSsQqTtAaZz]*)/g;
+    let m;
+    while ((m = re.exec(d)) !== null) {
+      const cmd = m[1];
+      const rel = (cmd === cmd.toLowerCase() && cmd !== 'Z' && cmd !== 'z');
+      const ox = rel ? cx : 0, oy = rel ? cy : 0;
+      const args = m[2].trim().split(/[\s,]+/).filter(Boolean).map(Number);
+      const C = cmd.toUpperCase();
+      lastCX2 = (C === 'C' || C === 'S') ? lastCX2 : null;
+      lastQCX = (C === 'Q' || C === 'T') ? lastQCX : null;
+      switch (C) {
+        case 'M':
+          cx = ox + args[0]; cy = oy + args[1]; sx = cx; sy = cy;
+          for (let i = 2; i < args.length; i += 2) {
+            const nx = ox + args[i], ny = oy + args[i+1];
+            segs.push({ type:'L', x0:cx, y0:cy, x1:nx, y1:ny });
+            cx = nx; cy = ny;
+          }
+          break;
+        case 'L':
+          for (let i = 0; i < args.length; i += 2) {
+            const nx = ox + args[i], ny = oy + args[i+1];
+            segs.push({ type:'L', x0:cx, y0:cy, x1:nx, y1:ny });
+            cx = nx; cy = ny;
+          }
+          break;
+        case 'H':
+          args.forEach(v => {
+            const nx = ox + v;
+            segs.push({ type:'L', x0:cx, y0:cy, x1:nx, y1:cy });
+            cx = nx;
+          });
+          break;
+        case 'V':
+          args.forEach(v => {
+            const ny = oy + v;
+            segs.push({ type:'L', x0:cx, y0:cy, x1:cx, y1:ny });
+            cy = ny;
+          });
+          break;
+        case 'C':
+          for (let i = 0; i < args.length; i += 6) {
+            const c1x = ox+args[i], c1y = oy+args[i+1];
+            const c2x = ox+args[i+2], c2y = oy+args[i+3];
+            const nx  = ox+args[i+4], ny  = oy+args[i+5];
+            segs.push({ type:'C', x0:cx, y0:cy, cx1:c1x, cy1:c1y, cx2:c2x, cy2:c2y, x1:nx, y1:ny });
+            lastCX2 = c2x; lastCY2 = c2y;
+            cx = nx; cy = ny;
+          }
+          break;
+        case 'S': {
+          for (let i = 0; i < args.length; i += 4) {
+            const c1x = lastCX2 !== null ? 2*cx - lastCX2 : cx;
+            const c1y = lastCY2 !== null ? 2*cy - lastCY2 : cy;
+            const c2x = ox+args[i], c2y = oy+args[i+1];
+            const nx  = ox+args[i+2], ny  = oy+args[i+3];
+            segs.push({ type:'C', x0:cx, y0:cy, cx1:c1x, cy1:c1y, cx2:c2x, cy2:c2y, x1:nx, y1:ny });
+            lastCX2 = c2x; lastCY2 = c2y;
+            cx = nx; cy = ny;
+          }
+          break;
+        }
+        case 'Q':
+          for (let i = 0; i < args.length; i += 4) {
+            const qcx = ox+args[i], qcy = oy+args[i+1];
+            const nx  = ox+args[i+2], ny  = oy+args[i+3];
+            segs.push({ type:'Q', x0:cx, y0:cy, cx:qcx, cy:qcy, x1:nx, y1:ny });
+            lastQCX = qcx; lastQCY = qcy;
+            cx = nx; cy = ny;
+          }
+          break;
+        case 'T':
+          for (let i = 0; i < args.length; i += 2) {
+            const qcx = lastQCX !== null ? 2*cx - lastQCX : cx;
+            const qcy = lastQCY !== null ? 2*cy - lastQCY : cy;
+            const nx  = ox+args[i], ny  = oy+args[i+1];
+            segs.push({ type:'Q', x0:cx, y0:cy, cx:qcx, cy:qcy, x1:nx, y1:ny });
+            lastQCX = qcx; lastQCY = qcy;
+            cx = nx; cy = ny;
+          }
+          break;
+        case 'A':
+          for (let i = 0; i < args.length; i += 7) {
+            const nx = ox+args[i+5], ny = oy+args[i+6];
+            segs.push({ type:'A', x0:cx, y0:cy,
+              rx:args[i], ry:args[i+1], xrot:args[i+2], laf:args[i+3], sf:args[i+4],
+              x1:nx, y1:ny });
+            cx = nx; cy = ny;
+          }
+          break;
+        case 'Z':
+          if (Math.hypot(cx-sx, cy-sy) > 0.001)
+            segs.push({ type:'L', x0:cx, y0:cy, x1:sx, y1:sy });
+          cx = sx; cy = sy;
+          break;
+      }
+    }
+    return segs;
+  }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 7 — BEZIER EVALUATORS
+   Evaluate a point and tangent angle at parameter t
+   along cubic and quadratic bezier curves.
+════════════════════════════════════════════════════════ */
+
+  // 7a — Cubic bezier: point and tangent at t
+  function cubicBezier(seg, t) {
+    const mt = 1 - t;
+    const x  = mt*mt*mt*seg.x0 + 3*mt*mt*t*seg.cx1 + 3*mt*t*t*seg.cx2 + t*t*t*seg.x1;
+    const y  = mt*mt*mt*seg.y0 + 3*mt*mt*t*seg.cy1 + 3*mt*t*t*seg.cy2 + t*t*t*seg.y1;
+    const dx = 3*(mt*mt*(seg.cx1-seg.x0) + 2*mt*t*(seg.cx2-seg.cx1) + t*t*(seg.x1-seg.cx2));
+    const dy = 3*(mt*mt*(seg.cy1-seg.y0) + 2*mt*t*(seg.cy2-seg.cy1) + t*t*(seg.y1-seg.cy2));
+    return { x, y, angle: Math.atan2(dy, dx) };
+  }
+
+  // 7b — Quadratic bezier: point and tangent at t
+  function quadBezier(seg, t) {
+    const mt = 1 - t;
+    const x  = mt*mt*seg.x0 + 2*mt*t*seg.cx + t*t*seg.x1;
+    const y  = mt*mt*seg.y0 + 2*mt*t*seg.cy + t*t*seg.y1;
+    const dx = 2*(mt*(seg.cx-seg.x0) + t*(seg.x1-seg.cx));
+    const dy = 2*(mt*(seg.cy-seg.y0) + t*(seg.y1-seg.cy));
+    return { x, y, angle: Math.atan2(dy, dx) };
+  }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 8 — NODE CLASSIFICATION
+   Walk the segment list and tag each endpoint node
+   with its kind and travel angles.
+════════════════════════════════════════════════════════ */
+
+  // 8 — Build a flat list of nodes from segments
+  function classifyNodes(segs) {
+    if (!segs.length) return [];
+    const nodes = [];
+    const N = segs.length;
+
+    for (let i = 0; i < N; i++) {
+      const seg     = segs[i];
+      const nextSeg = segs[(i + 1) % N];
+      const x = seg.x1, y = seg.y1;
+      const angleIn  = segAngleEnd(seg);
+      const angleOut = segAngleStart(nextSeg);
+
+      let kind;
+      if (isStraight(seg) && isStraight(nextSeg))  kind = 'straight-corner';
+      else if (isStraight(seg) && isCurve(nextSeg)) kind = 'straight-end';
+      else if (isCurve(seg) && isStraight(nextSeg)) kind = 'straight-start';
+      else                                           kind = 'curve';
+
+      // upgrade to curved-corner if tangent kinks at this node
+      // (covers curve→curve joins like leaf tips)
+      if (kind !== 'straight-corner') {
+        const diff = Math.abs(angleDiff(angleIn, angleOut)) * 180 / Math.PI;
+        if (diff > 5) kind = 'curved-corner';
+      }
+
+      nodes.push({ x, y, kind, angleIn, angleOut, nodeIdx: i, seg });
+      dbg(`node ${i}: ${kind} pos=(${x.toFixed(2)},${y.toFixed(2)}) in=${deg(angleIn)} out=${deg(angleOut)}`);
+    }
+    return nodes;
+  }
+
+  // 8z — Scan nodes for close pairs, return warning list
+  //      threshMm is in mm; node coords are in SVG user units → convert threshold
+  function scanNodeProximity(nodes, threshMm) {
+    const pairs = [];
+    const N = nodes.length;
+    const threshSVG = threshMm / MM_PER_USER_UNIT;
+    for (let i = 0; i < N; i++) {
+      const a = nodes[i];
+      const b = nodes[(i + 1) % N];
+      const dist = Math.hypot(b.x - a.x, b.y - a.y);
+      if (dist < threshSVG) {
+        const distMm = dist * MM_PER_USER_UNIT;
+        const turn = Math.abs(angleDiff(a.angleIn, b.angleOut)) * 180 / Math.PI;
+        pairs.push({ i, j: (i + 1) % N, dist: distMm, turn });
+      }
+    }
+    return pairs;
+  }
+
+  // 8y — Merge close adjacent node pairs using slide-to-M.
+  //
+  //      Strategy: sort all adjacent pairs by distance (closest first), merge
+  //      one pair at a time working up to the threshold. Re-scan after each merge.
+  //
+  //      For each merge of nodes A (index i) and B (index i+1 mod N):
+  //        — M is the coordinate midpoint of A and B.
+  //        — 3a: A's incoming .seg endpoint nudges from A.x/y to M.
+  //              All curve control points are preserved exactly.
+  //        — 4b: The next node's .seg start nudges from B.x/y to M.
+  //              First control point shifts by the same delta.
+  //        — B is deleted. One node remains at M.
+  //
+  //      Position error is ≤ half the merge threshold in all cases.
+  //      threshMm is in mm; node coords are in SVG user units → convert.
+
+  function mergeCloseNodes(nodes, threshMm) {
+    if (threshMm <= 0) return nodes;
+    const threshSVG = threshMm / MM_PER_USER_UNIT;
+
+    // Work on a mutable copy
+    let ns = nodes.map(n => ({ ...n, seg: { ...n.seg } }));
+
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const N = ns.length;
+
+      // Build distance list for all adjacent pairs, sort closest first
+      const pairs = [];
+      for (let i = 0; i < N; i++) {
+        const j = (i + 1) % N;
+        const d = Math.hypot(ns[j].x - ns[i].x, ns[j].y - ns[i].y);
+        if (d < threshSVG) pairs.push({ i, j, d });
+      }
+      if (!pairs.length) break;
+      pairs.sort((a, b) => a.d - b.d);
+
+      // Merge the closest pair: A=ns[i], B=ns[j] where j = i+1 mod N.
+      //
+      // Slide-to-M: M is the simple coordinate midpoint of A and B.
+      //   — 3a: A keeps its incoming seg (.seg), just nudge .seg.x1/y1 to M
+      //         and move A's position to M.
+      //   — 4b: B's outgoing geometry (carried by the next node's .seg x0/y0
+      //         and first control point) slides from B's position to M.
+      //   — Delete B. One node remains at M.
+      //
+      // All curve geometry is preserved intact. The only change is a position
+      // nudge of ≤ half the merge threshold (≤ 0.1mm at threshold 0.2mm).
+
+      const { i, j } = pairs[0];
+      const A = ns[i];
+      const B = ns[j];
+
+      const mx = (A.x + B.x) / 2;
+      const my = (A.y + B.y) / 2;
+
+      // Slide A's incoming seg endpoint to M (3a slides to 3.5)
+      const newASeg = { ...A.seg, x1: mx, y1: my };
+
+      // Slide the next node's seg start from B's position to M (4b slides to 3.5)
+      const afterIdx = (j + 1) % N;
+      const nextSeg = { ...ns[afterIdx].seg, x0: mx, y0: my };
+      // Shift first control point by the same delta so curve tangent is preserved
+      const dx = mx - B.x, dy = my - B.y;
+      if (nextSeg.type === 'C') { nextSeg.cx1 += dx; nextSeg.cy1 += dy; }
+      if (nextSeg.type === 'Q') { nextSeg.cx  += dx; nextSeg.cy  += dy; }
+
+      // Re-derive kind and angles for merged node at M
+      const inIsCurve  = isCurve(A.seg);
+      const outIsCurve = isCurve(ns[afterIdx].seg);
+      let kind;
+      if      (!inIsCurve && !outIsCurve) kind = 'straight-corner';
+      else if (!inIsCurve &&  outIsCurve) kind = 'straight-end';
+      else if ( inIsCurve && !outIsCurve) kind = 'straight-start';
+      else                                kind = 'curve';
+      const angleIn  = segAngleEnd(newASeg);
+      const angleOut = segAngleStart(nextSeg);
+      if (kind !== 'straight-corner') {
+        if (Math.abs(angleDiff(angleIn, angleOut)) * 180 / Math.PI > 5) kind = 'curved-corner';
+      }
+
+      const newNode = { x: mx, y: my, kind, angleIn, angleOut, nodeIdx: i, seg: newASeg };
+
+      // Update next node's seg start
+      ns[afterIdx] = { ...ns[afterIdx], seg: nextSeg };
+
+      // Delete B, replace A with merged node.
+      // j is always i+1 mod N — handle wrap where j=0, i=N-1.
+      if (j === 0) {
+        ns.splice(i, 1);      // remove A (last element)
+        ns.splice(0, 1);      // remove B (first element, was j=0)
+        ns.unshift(newNode);  // insert merged node at front
+      } else {
+        ns.splice(i, 2, newNode);
+      }
+
+      ns.forEach((n, k) => { n.nodeIdx = k; });
+      changed = true;
+    }
+
+    return ns;
+  }
+
+  // 8z2 — Reconstruct an exact SVG path d string from a post-merge node array.
+  //       Each node carries .seg — the incoming segment ending at that node.
+  //       Segment geometry is preserved verbatim; only endpoints are nudged
+  //       by ≤ half the merge threshold at merged points.
+  function nodesToPathD(nodes) {
+    if (!nodes.length) return '';
+    // Start position is the endpoint of the LAST node's seg (i.e. the wrap-around start)
+    // which equals nodes[0]'s incoming seg start point.
+    const firstSeg = nodes[0].seg;
+    let d = `M${firstSeg.x0.toFixed(4)},${firstSeg.y0.toFixed(4)}`;
+    for (const node of nodes) {
+      const s = node.seg;
+      switch (s.type) {
+        case 'L':
+          d += ` L${s.x1.toFixed(4)},${s.y1.toFixed(4)}`;
+          break;
+        case 'C':
+          d += ` C${s.cx1.toFixed(4)},${s.cy1.toFixed(4)} ${s.cx2.toFixed(4)},${s.cy2.toFixed(4)} ${s.x1.toFixed(4)},${s.y1.toFixed(4)}`;
+          break;
+        case 'Q':
+          d += ` Q${s.cx.toFixed(4)},${s.cy.toFixed(4)} ${s.x1.toFixed(4)},${s.y1.toFixed(4)}`;
+          break;
+        case 'A':
+          d += ` A${s.rx.toFixed(4)},${s.ry.toFixed(4)} ${s.xrot.toFixed(4)} ${s.laf},${s.sf} ${s.x1.toFixed(4)},${s.y1.toFixed(4)}`;
+          break;
+      }
+    }
+    return d + ' Z';
+  }
+
+    // 8a — True if segment is a straight line
+    function isStraight(seg) { return seg.type === 'L'; }
+
+    // 8b — True if segment is a curve (cubic, quadratic or arc)
+    function isCurve(seg)    { return seg.type === 'C' || seg.type === 'Q' || seg.type === 'A'; }
+
+    // 8c — Tangent angle at the START of a segment
+    function segAngleStart(seg) {
+      if (seg.type === 'L') return Math.atan2(seg.y1 - seg.y0, seg.x1 - seg.x0);
+      if (seg.type === 'C') {
+        const dx = seg.cx1 - seg.x0, dy = seg.cy1 - seg.y0;
+        if (Math.hypot(dx,dy) < 1e-9) return Math.atan2(seg.cy2-seg.y0, seg.cx2-seg.x0);
+        return Math.atan2(dy, dx);
+      }
+      if (seg.type === 'Q') {
+        const dx = seg.cx - seg.x0, dy = seg.cy - seg.y0;
+        if (Math.hypot(dx,dy) < 1e-9) return Math.atan2(seg.y1-seg.y0, seg.x1-seg.x0);
+        return Math.atan2(dy, dx);
+      }
+      return Math.atan2(seg.y1 - seg.y0, seg.x1 - seg.x0);
+    }
+
+    // 8d — Tangent angle at the END of a segment
+    function segAngleEnd(seg) {
+      if (seg.type === 'L') return Math.atan2(seg.y1 - seg.y0, seg.x1 - seg.x0);
+      if (seg.type === 'C') {
+        const dx = seg.x1 - seg.cx2, dy = seg.y1 - seg.cy2;
+        if (Math.hypot(dx,dy) < 1e-9) return Math.atan2(seg.y1-seg.cy1, seg.x1-seg.cx1);
+        return Math.atan2(dy, dx);
+      }
+      if (seg.type === 'Q') {
+        const dx = seg.x1 - seg.cx, dy = seg.y1 - seg.cy;
+        if (Math.hypot(dx,dy) < 1e-9) return Math.atan2(seg.y1-seg.y0, seg.x1-seg.x0);
+        return Math.atan2(dy, dx);
+      }
+      return Math.atan2(seg.y1 - seg.y0, seg.x1 - seg.x0);
+    }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 9 — OFFSET POINT HELPERS
+   Given a node position and travel angle, return
+   the beam-edge point on the left (outer) and right (inner).
+════════════════════════════════════════════════════════ */
+
+  // 9a — Offset a single node left and right using the tangent table
+  function offsetPoint(nx, ny, travelAngle, table) {
+    const left  = tangentTableLookup(table, travelAngle);
+    const right = tangentTableLookup(table, travelAngle + Math.PI);
+    return {
+      left:  { x: nx + left.x,  y: ny + left.y  },
+      right: { x: nx + right.x, y: ny + right.y }
+    };
+  }
+
+  // 9b — Line intersection: two lines each defined by a point and angle
+  //      Returns {x,y} or null if parallel
+  function lineIntersect(x1, y1, a1, x2, y2, a2) {
+    const dx1 = Math.cos(a1), dy1 = Math.sin(a1);
+    const dx2 = Math.cos(a2), dy2 = Math.sin(a2);
+    const denom = dx1 * dy2 - dy1 * dx2;
+    if (Math.abs(denom) < 1e-10) return null;
+    const t = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / denom;
+    return { x: x1 + t * dx1, y: y1 + t * dy1 };
+  }
+
+  // 9c — Convert a point array into an SVG path d string
+  //      node points → straight lines; cmrom runs → cubic bezier approximation of Catmull-Rom
+  //
+  // A crvstop point is a loop-excision crossing inserted between two cmrom points.
+  // It must act as a hard spline boundary — splitting the cmrom chain into two
+  // sub-runs so the tangent influence never bleeds across the excision point.
+  // Each sub-run uses the phantomBefore / phantomAfter stored on the crvstop
+  // rather than reflecting or borrowing neighbours.
+  function ptsToPath(pts, pathIdx) {
+    if (pts.length === 0) return '';
+    const n = pts.length;
+
+    // A crvnode is soft (spline flows through it) only opposite a pure curve node.
+    // At straight-start / straight-end boundaries it is hard — reflection only.
+    const _nodes = gStoredNodesArrays[pathIdx] || [];
+    const isSoftCrvnode = pt => {
+      if (pt.type !== 'crvnode') return false;
+      const kind = (_nodes[pt.nodeIdx] || {}).kind;
+      return kind === 'curve';
+    };
+
+    // Find a non-cmrom start index so we never begin mid-run.
+    // crvstop also counts as a hard boundary for starting purposes.
+    // If all points are cmrom (pure curve, no corners/crvstops) start at 0.
+    let start = 0;
+    for (let k = 0; k < n; k++) {
+      if (pts[k].type !== 'cmrom' && pts[k].type !== 'arcnode' && !(pts[k].type === 'crvnode' && isSoftCrvnode(pts[k]))) { start = k; break; }
+    }
+
+    const p = i => pts[(start + i) % n];   // circular accessor from start
+    let d = `M${p(0).x.toFixed(4)},${p(0).y.toFixed(4)}`;
+    let i = 1;
+
+    // Clamp a control point so its handle never exceeds 1/3 of the span length.
+    // Direction is preserved; only the magnitude is reduced if needed.
+    function clampHandle(cp, anchor, spanLen) {
+      const dx = cp.x - anchor.x, dy = cp.y - anchor.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const max = spanLen / 3;
+      if (len <= max || len === 0) return cp;
+      const s = max / len;
+      return { x: anchor.x + dx * s, y: anchor.y + dy * s };
+    }
+
+    // Helper: emit one Catmull-Rom sub-run given an already-built run[] array
+    // (run[0] = open boundary node, run[1..last-1] = cmrom interior, run[last] = close boundary),
+    // plus explicit phantom points at each end.
+    function emitRun(run, phantomP0, phantomP3) {
+      const last = run.length - 1;
+      for (let r = 0; r < last; r++) {
+        const p0 = r > 0       ? run[r - 1] : phantomP0;
+        const p1 = run[r];
+        const p2 = run[r + 1];
+        const p3 = r + 2 <= last ? run[r + 2] : phantomP3;
+        const spanLen = Math.sqrt((p2.x-p1.x)**2 + (p2.y-p1.y)**2);
+        const raw1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
+        const raw2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
+        const { x: cp1x, y: cp1y } = clampHandle(raw1, p1, spanLen);
+        const { x: cp2x, y: cp2y } = clampHandle(raw2, p2, spanLen);
+        d += ` C${cp1x.toFixed(4)},${cp1y.toFixed(4)} ${cp2x.toFixed(4)},${cp2y.toFixed(4)} ${p2.x.toFixed(4)},${p2.y.toFixed(4)}`;
+      }
+    }
+
+    while (i < n) {
+      if (p(i).type === 'cmrom' || p(i).type === 'arcnode' || isSoftCrvnode(p(i))) {
+        // Collect run: open-node already at p(i-1), then cmrom points —
+        // but STOP (and split) whenever a crvstop is encountered mid-run.
+        const openIdx  = i - 1;
+        let   openNode = p(openIdx);
+        let   run      = [openNode];
+
+        while (i < n) {
+          const cur = p(i);
+          if (cur.type === 'cmrom' || cur.type === 'arcnode' || isSoftCrvnode(cur)) {
+            run.push(cur);
+            i++;
+          } else if (cur.type === 'crvstop') {
+            // --- split here ---
+            // Close the current sub-run with the crvstop as the boundary node.
+            run.push(cur);  // crvstop is the close-node of this sub-run
+            const last = run.length - 1;
+
+            // Phantom for the open end of this sub-run
+            const phantomP0 = openNode.type === 'crvstop'
+              ? openNode.phantomBefore
+              : (() => {
+                  const isHard = openNode.type === 'internodebefore'
+                              || openNode.type === 'internodeafter'
+                              || openNode.type === 'node'
+                              || (openNode.type === 'crvnode' && !isSoftCrvnode(openNode));
+                  const prevPt = p((openIdx - 1 + n) % n);
+                  return (!isHard && (prevPt.type === 'cmrom' || isSoftCrvnode(prevPt)))
+                    ? prevPt
+                    : { x: 2*run[0].x - run[1].x, y: 2*run[0].y - run[1].y };
+                })();
+            // Phantom for the close end: use the crvstop's stored phantomBefore
+            // (the last surviving point before the crossing).
+            const phantomP3 = cur.phantomBefore;
+
+            emitRun(run, phantomP0, phantomP3);
+
+            // Now start a new sub-run opening from the crvstop.
+            // Move to the crvstop point in the path (L to it = sharp corner).
+            d += ` L${cur.x.toFixed(4)},${cur.y.toFixed(4)}`;
+            openNode = cur;
+            run = [cur];
+            i++;
+            // Continue collecting cmrom points for the next sub-run.
+          } else {
+            // Any other non-cmrom type: normal run close.
+            break;
+          }
+        }
+
+        // Close the final sub-run with the next non-cmrom point.
+        const closeNode = p(i % n);
+        run.push(closeNode);
+        const last = run.length - 1;
+
+        // Phantom for open end
+        const phantomP0 = openNode.type === 'crvstop'
+          ? openNode.phantomAfter
+          : (() => {
+              const isHard = openNode.type === 'internodebefore'
+                          || openNode.type === 'internodeafter'
+                          || openNode.type === 'node'
+                          || (openNode.type === 'crvnode' && !isSoftCrvnode(openNode));
+              const prevPt = p((openIdx - 1 + n) % n);
+              return (!isHard && (prevPt.type === 'cmrom' || isSoftCrvnode(prevPt)))
+                ? prevPt
+                : { x: 2*run[0].x - run[1].x, y: 2*run[0].y - run[1].y };
+            })();
+
+        // Phantom for close end
+        const phantomP3 = closeNode.type === 'crvstop'
+          ? closeNode.phantomBefore
+          : (() => {
+              const isHard = closeNode.type === 'internodebefore'
+                           || closeNode.type === 'internodeafter'
+                           || closeNode.type === 'node'
+                           || (closeNode.type === 'crvnode' && !isSoftCrvnode(closeNode));
+              const nextPt = p((openIdx + last + 1) % n);
+              return (!isHard && (nextPt.type === 'cmrom' || isSoftCrvnode(nextPt)))
+                ? nextPt
+                : { x: 2*run[last].x - run[last-1].x, y: 2*run[last].y - run[last-1].y };
+            })();
+
+        emitRun(run, phantomP0, phantomP3);
+
+      } else {
+        // straight-corner node or crvstop at top level — hard move, no spline
+        d += ` L${p(i).x.toFixed(4)},${p(i).y.toFixed(4)}`;
+        i++;
+      }
+    }
+    return d + ' Z';
+  }
+
+  // 9d — Signed angular difference b - a, result in (-π, π]
+  function angleDiff(a, b) {
+    let d = b - a;
+    while (d >  Math.PI) d -= 2 * Math.PI;
+    while (d <= -Math.PI) d += 2 * Math.PI;
+    return d;
+  }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 10 — TRACE KERF OFFSET
+   Main offset pipeline. For every path in the loaded SVG:
+   parse → classify nodes → offset points → find crossings
+   → insert crossing markers → store results → render.
+════════════════════════════════════════════════════════ */
+
+  // 10 — Master function: trace kerf offset for all paths
+  function traceKerfOffset() {
+    setStatus('computing…', '');
+    clearDebug();
+    readBeamInputs();
+    buildTangentTable(gKx, gKy, gSuperellipseN);
+    resetOffsetArrays();
+
+    if (!validateSVGLoaded()) return;
+    const pathEls = gLoadedSVGDoc.querySelectorAll('path');
+    if (!validatePathsFound(pathEls)) return;
+
+    const { allOriginal, allMerged, allOuter, allInner, totalNodes } = processAllPaths(pathEls);
+    if (!validateProcessedPaths(allOriginal)) return;
+
+    storeSVGMetadata(allOriginal, allMerged);
+    renderOffsetResult(allMerged, allOuter, allInner);
+    showOffsetResultUI(allOriginal.length, totalNodes);
+    flushDebug();
+  }
+
+    // 10a — Reset all offset arrays before a fresh trace
+    function resetOffsetArrays() {
+      gStoredNodesArrays  = [];
+      gStoredInnerArrays  = [];
+      gStoredOuterArrays  = [];
+      gCleanedInnerArrays = [];
+      gCleanedOuterArrays = [];
+      gStoredWindings     = [];
+    }
+
+    // 10b — Process all path elements, accumulate results
+    function processAllPaths(pathEls) {
+      const allOriginal = [];
+      const allMerged   = [];
+      const allOuter    = [];
+      const allInner    = [];
+      let totalNodes    = 0;
+
+      pathEls.forEach((pathEl, idx) => {
+        try {
+          const result = processOnePath(pathEl, idx);
+          if (!result) return;
+          allOriginal.push(result.d);
+          allMerged.push(result.mergedD);
+          gStoredNodesArrays.push(result.nodes);
+          gStoredWindings.push(result.leftIsOuter);
+          allOuter.push(ptsToPath(result.outerInserted, idx));
+          allInner.push(ptsToPath(result.innerInserted, idx));
+          gStoredInnerArrays.push(result.innerInserted);
+          gStoredOuterArrays.push(result.outerInserted);
+          totalNodes += result.nodes.length;
+        } catch (e) {
+          console.warn('path', idx, e);
+        }
+      });
+
+      return { allOriginal, allMerged, allOuter, allInner, totalNodes };
+    }
+
+    // 10c — Check an SVG file has been loaded
+    function validateSVGLoaded() {
+      if (!gLoadedSVGDoc) {
+        setStatus('no svg loaded', 'error');
+        return false;
+      }
+      return true;
+    }
+
+    // 10d — Check the SVG contains at least one path element
+    function validatePathsFound(pathEls) {
+      if (pathEls.length === 0) {
+        setStatus('no <path> elements found', 'error');
+        return false;
+      }
+      return true;
+    }
+
+    // 10e — Check at least one path was successfully processed
+    function validateProcessedPaths(allOriginal) {
+      if (allOriginal.length === 0) {
+        setStatus('could not process any paths', 'error');
+        return false;
+      }
+      return true;
+    }
+
+    // 10f — Process a single path element → returns offset arrays
+    function processOnePath(pathEl, idx) {
+      const d    = pathEl.getAttribute('d') || '';
+      const segs = parsePathSegments(d);
+      if (segs.length < 1) return null;
+
+      // Reject single-segment paths
+      if (segs.length < 2) return null;
+
+      // Reject unjoined (open) paths
+      const firstSeg = segs[0];
+      const lastSeg  = segs[segs.length - 1];
+      if (Math.hypot(lastSeg.x1 - firstSeg.x0, lastSeg.y1 - firstSeg.y0) > 0.001) return null;
+
+      let nodes = classifyNodes(segs);
+      if (nodes.length < 2) return null;
+      const mergeThresh = parseFloat(document.getElementById('merge-slider').value) || 0;
+      if (mergeThresh > 0) nodes = mergeCloseNodes(nodes, mergeThresh);
+      if (nodes.length < 2) return null;
+
+      const leftIsOuter = computeWinding(nodes);
+      const { outerPts, innerPts } = buildOffsetPoints(nodes, leftIsOuter);
+
+      dbg(`=== PATH ${idx} ===`);
+      const innerCrossings = findCrossings(innerPts);
+      const outerCrossings = findCrossings(outerPts);
+      dbg(`innerPts: ${innerPts.length} pts, ${innerCrossings.length} crossings`);
+      dbg(`outerPts: ${outerPts.length} pts, ${outerCrossings.length} crossings`);
+
+      const innerInserted = insertCrossings(innerPts, innerCrossings);
+      const outerInserted = insertCrossings(outerPts, outerCrossings);
+
+      logInsertedPoints('inner', innerInserted);
+      logInsertedPoints('outer', outerInserted);
+
+      // Reconstruct exact path from post-merge nodes — this is the true geometric
+      // input to the offset, pixel-perfect on all spans except merged cluster points
+      // where error ≤ half the merge threshold.
+      const mergedD = nodesToPathD(nodes);
+
+      return { d, mergedD, nodes, outerInserted, innerInserted, leftIsOuter };
+    }
+
+      // 10f-i — Compute winding direction (true = left is outer)
+      function computeWinding(nodes) {
+        let area = 0;
+        for (let i = 0; i < nodes.length; i++) {
+          const j = (i + 1) % nodes.length;
+          area += nodes[i].x * nodes[j].y - nodes[j].x * nodes[i].y;
+        }
+        return area > 0;
+      }
+
+      // 10f-ii — Build raw outer and inner offset point arrays from nodes
+      function buildOffsetPoints(nodes, leftIsOuter) {
+        const outerPts = [];
+        const innerPts = [];
+        const ANGLE_STEP = (parseFloat(document.getElementById('curve-deg').value) || 10) * Math.PI / 180;
+        const DIST_CAP   = (parseFloat(document.getElementById('curve-res').value) || 0.3) / MM_PER_USER_UNIT;
+
+        let prevNodeIdx = nodes[nodes.length - 1].nodeIdx;
+
+        for (const node of nodes) {
+          // Use the actual turn angle between incoming and outgoing travel directions.
+          // This correctly handles merged nodes whose .kind may have been inherited from
+          // a different node in the cluster and no longer reflects the true geometry.
+          // >5° turn → two anchor points (corner); ≤5° → one tangent point (smooth).
+          const turnDeg = Math.abs(angleDiff(node.angleIn, node.angleOut)) * 180 / Math.PI;
+          const isCorner = turnDeg > 5;
+
+          // sample curved incoming segment BEFORE emitting this node's anchor point.
+          // Tag cmrom samples with prevNodeIdx so they sit correctly between
+          // node_out(prev) and node_in(current) in ptsToPath.
+          if (node.kind !== 'straight-corner' && isCurve(node.seg)) {
+            const samples = sampleCurveSegment(node.seg, ANGLE_STEP, DIST_CAP);
+            // samples[0] = t=0, samples[last] = t=1 (node anchors) — skip both ends
+            for (let s = 1; s < samples.length - 1; s++) {
+              const sp = samples[s];
+              const pt = offsetPoint(sp.x, sp.y, sp.angle, gStoredTable);
+              if (leftIsOuter) {
+                outerPts.push({ ...pt.left,  type:'cmrom', nodeIdx: prevNodeIdx });
+                innerPts.push({ ...pt.right, type:'cmrom', nodeIdx: prevNodeIdx });
+              } else {
+                outerPts.push({ ...pt.right, type:'cmrom', nodeIdx: prevNodeIdx });
+                innerPts.push({ ...pt.left,  type:'cmrom', nodeIdx: prevNodeIdx });
+              }
+            }
+          }
+
+          // now emit the anchor node point(s) for this node
+          if (isCorner) {
+            const ptIn  = offsetPoint(node.x, node.y, node.angleIn,  gStoredTable);
+            const ptOut = offsetPoint(node.x, node.y, node.angleOut, gStoredTable);
+            if (leftIsOuter) {
+              outerPts.push({ ...ptIn.left,  type:'node', nodeIdx: node.nodeIdx });
+              outerPts.push({ ...ptOut.left, type:'node', nodeIdx: node.nodeIdx });
+              innerPts.push({ ...ptIn.right, type:'node', nodeIdx: node.nodeIdx });
+              innerPts.push({ ...ptOut.right,type:'node', nodeIdx: node.nodeIdx });
+            } else {
+              outerPts.push({ ...ptIn.right, type:'node', nodeIdx: node.nodeIdx });
+              outerPts.push({ ...ptOut.right,type:'node', nodeIdx: node.nodeIdx });
+              innerPts.push({ ...ptIn.left,  type:'node', nodeIdx: node.nodeIdx });
+              innerPts.push({ ...ptOut.left, type:'node', nodeIdx: node.nodeIdx });
+            }
+          } else {
+            const travelAngle = node.kind === 'straight-start' ? node.angleOut : node.angleIn;
+            const pt = offsetPoint(node.x, node.y, travelAngle, gStoredTable);
+            if (leftIsOuter) {
+              outerPts.push({ ...pt.left,  type:'crvnode', nodeIdx: node.nodeIdx });
+              innerPts.push({ ...pt.right, type:'crvnode', nodeIdx: node.nodeIdx });
+            } else {
+              outerPts.push({ ...pt.right, type:'crvnode', nodeIdx: node.nodeIdx });
+              innerPts.push({ ...pt.left,  type:'crvnode', nodeIdx: node.nodeIdx });
+            }
+          }
+
+          prevNodeIdx = node.nodeIdx;
+        }
+        return { outerPts, innerPts };
+      }
+
+      // 10f-ii-a — Sample a curved segment at 20°/5mm intervals
+      //            Returns array of {x, y, angle} including start and end points
+      function sampleCurveSegment(seg, angleStepRad, distCap) {
+        // Step 1: build high-res table — cumulative arc length and angle at each step
+        const STEPS = 500;
+        const table = [];   // { t, x, y, angle, arcLen }
+        let cumLen  = 0;
+        for (let i = 0; i <= STEPS; i++) {
+          const t  = i / STEPS;
+          const sp = evalSegPoint(seg, t);
+          if (i > 0) {
+            const prev = table[table.length - 1];
+            const dx = sp.x - prev.x, dy = sp.y - prev.y;
+            cumLen += Math.sqrt(dx*dx + dy*dy);
+          }
+          table.push({ t, x: sp.x, y: sp.y, angle: sp.angle, arcLen: cumLen });
+        }
+        const totalLen = cumLen;
+
+        // Step 2: compute total absolute angle change along the segment
+        let totalAngle = 0;
+        for (let i = 1; i < table.length; i++) {
+          let diff = Math.abs(table[i].angle - table[i-1].angle);
+          if (diff > Math.PI) diff = 2*Math.PI - diff;
+          totalAngle += diff;
+        }
+
+        // Step 3: determine n — number of equal intervals
+        // distance requirement: how many distCap intervals fit
+        // angle requirement: how many angleStep intervals needed
+        const nDist  = Math.floor(totalLen   / distCap);
+        const nAngle = Math.floor(totalAngle / angleStepRad);
+        let   n      = Math.max(nDist, nAngle, 1); // always at least 1 interior point on curved segments
+        // (without this, large curve-res returns only start+end → no cmrom pts → straight line)
+
+        // Step 4: binary search helper — find table entry at target arc length
+        // Returns the evalSegPoint result augmented with arcLen for step 6.
+        function tAtArcLen(target) {
+          let lo = 0, hi = table.length - 1;
+          while (lo < hi - 1) {
+            const mid = (lo + hi) >> 1;
+            if (table[mid].arcLen < target) lo = mid; else hi = mid;
+          }
+          const span = table[hi].arcLen - table[lo].arcLen;
+          const frac = span > 0 ? (target - table[lo].arcLen) / span : 0;
+          const t    = table[lo].t + frac * (table[hi].t - table[lo].t);
+          const sp   = evalSegPoint(seg, t);
+          sp.arcLen  = target;  // attach arc length for midpoint calculations in step 6
+          return sp;
+        }
+
+        // Step 5: place n equally-spaced candidate interior points
+        const interval = totalLen / (n + 1);
+        let candidates = [];
+        for (let k = 1; k <= n; k++) {
+          candidates.push(tAtArcLen(k * interval));
+        }
+
+        // Step 6: subdivide any gap where local angle change exceeds angleStepRad.
+        // Insert arc-length midpoint into any gap that exceeds the threshold.
+        // Repeat until all gaps are clean — converges quickly, each pass halves angles.
+        // table[0] and table[last] carry arcLen=0 and arcLen=totalLen respectively.
+        table[0].arcLen               = 0;
+        table[table.length-1].arcLen  = totalLen;
+        const allPts = [table[0], ...candidates, table[table.length - 1]];
+        // MIN_GAP prevents infinite subdivision at cusps/sharp tips where the angle
+        // difference never converges regardless of how many midpoints are inserted
+        // (e.g. a leaf tip where tangent flips ~180° at a single point).
+        const MIN_GAP = totalLen * 1e-4;
+        let changed = true;
+        let maxIter = 2000;
+        while (changed && maxIter-- > 0) {
+          changed = false;
+          for (let i = 0; i < allPts.length - 1; i++) {
+            let diff = Math.abs(allPts[i+1].angle - allPts[i].angle);
+            if (diff > Math.PI) diff = 2*Math.PI - diff;
+            if (diff > angleStepRad) {
+              const arcA  = allPts[i].arcLen;
+              const arcB  = allPts[i+1].arcLen;
+              // stop subdividing if the gap is already tiny — cusp, not a smooth curve
+              if (arcB - arcA < MIN_GAP) continue;
+              const midArc = (arcA + arcB) / 2;
+              allPts.splice(i + 1, 0, tAtArcLen(midArc));
+              changed = true;
+              break; // restart scan after insertion
+            }
+          }
+        }
+
+        return allPts;
+      }
+
+      // 10f-ii-b — Evaluate point and tangent angle at t on any segment type
+      function evalSegPoint(seg, t) {
+        if (seg.type === 'C') return cubicBezier(seg, t);
+        if (seg.type === 'Q') return quadBezier(seg, t);
+        // arc: approximate via linear interpolation of angle
+        const angle = Math.atan2(seg.y1 - seg.y0, seg.x1 - seg.x0);
+        return {
+          x: seg.x0 + t*(seg.x1-seg.x0),
+          y: seg.y0 + t*(seg.y1-seg.y0),
+          angle
+        };
+      }
+
+      // 10f-iii — Log inserted crossing points to debug
+      function logInsertedPoints(label, arr) {
+        dbg(`--- ${label} after insertCrossings (${arr.length} pts) ---`);
+        arr.forEach((p, k) => dbg(`  [${k}] (${p.x.toFixed(2)},${p.y.toFixed(2)}) type=${p.type||'node'} nodeIdx=${p.nodeIdx??'—'}`));
+      }
+
+    // 10g — Store viewBox and stroke-width for later rendering steps
+    function storeSVGMetadata(allOriginal, allMerged) {
+      const vbParts = (gLoadedViewBox || '0 0 100 100').split(/[\s,]+/).map(Number);
+      const svgW    = vbParts[2] || 100, svgH = vbParts[3] || 100;
+      gStoredOriginal = allMerged;   // use post-merge geometry — this is what offset was derived from
+      gStoredViewBox  = gLoadedViewBox;
+      gStoredSW       = Math.max(0.05, Math.min(svgW, svgH) * 0.004);
+    }
+
+    // 10h — Build the output SVG string and push it to the result preview
+    function renderOffsetResult(allOriginal, allOuter, allInner) {
+      const svgString = buildOffsetSVGString(allOriginal, allOuter, allInner);
+      gOutputSVGText  = svgString;
+      displayResultSVG(svgString);
+    }
+
+      // 10h-i — Assemble the three-layer SVG string (original / outer / inner)
+      function buildOffsetSVGString(allOriginal, allOuter, allInner) {
+        const vbParts = (gStoredViewBox || '0 0 100 100').split(/[\s,]+/).map(Number);
+        const svgW = vbParts[2] || 100, svgH = vbParts[3] || 100;
+        const dotR = Math.max(svgW, svgH) * NODE_DOT_RADIUS_FRACTION;
+        let out = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${gStoredViewBox}" width="${svgW}" height="${svgH}">`;
+        out += `\n  <g id="original">`;
+        allOriginal.forEach(d => { out += `\n    <path d="${d}" fill="none" stroke="#555" stroke-width="${gStoredSW}"/>`; });
+        out += `\n  </g>\n  <g id="outer">`;
+        allOuter.forEach(d => { out += `\n    <path d="${d}" fill="none" stroke="#33cc55" stroke-width="${gStoredSW}"/>`; });
+        out += `\n  </g>\n  <g id="inner">`;
+        allInner.forEach(d => { out += `\n    <path d="${d}" fill="none" stroke="#ff3333" stroke-width="${gStoredSW}"/>`; });
+        out += `\n  </g>\n  <g id="nodes">`;
+        gStoredNodesArrays.forEach(nodes => {
+          nodes.forEach(n => { out += `\n    <circle cx="${n.x}" cy="${n.y}" r="${dotR}" fill="${NODE_DOT_COLOR_RESULT}" opacity="0.8"/>`; });
+        });
+        out += `\n  </g>`;
+        // Debug layer: white dots at every curve-loop crossing found during step 11.5
+        if (gDebugCrossingPts.length > 0) {
+          const xR = Math.max(dotR, gStoredSW) * 2.5;
+          out += `\n  <g id="debug-crossings">`;
+          gDebugCrossingPts.forEach(p => {
+            out += `\n    <circle cx="${p.x.toFixed(4)}" cy="${p.y.toFixed(4)}" r="${xR.toFixed(4)}" fill="white" opacity="0.9"/>`;
+          });
+          out += `\n  </g>`;
+        }
+        // Invalid paths layer: orange display-only paths (single segment or open), stripped at download
+        if (gLoadedSVGDoc) {
+          const invalidPaths = gLoadedSVGDoc.querySelectorAll('path[data-invalid]');
+          if (invalidPaths.length > 0) {
+            out += `\n  <g id="invalid-paths">`;
+            invalidPaths.forEach(p => {
+              out += `\n    <path d="${p.getAttribute('d')}" fill="none" stroke="#ff8800" stroke-width="${gStoredSW}" data-invalid="1"/>`;
+            });
+            out += `\n  </g>`;
+          }
+        }
+        out += `\n</svg>`;
+        return out;
+      }
+
+      // 10h-ii — Push SVG string into the result preview panel (portrait + landscape)
+      function displayResultSVG(svgString) {
+        // Portrait
+        const ri = document.getElementById('result-preview-inner-portrait');
+        if (ri) {
+          ri.innerHTML = svgString;
+          const rs = ri.querySelector('svg');
+          if (rs) { rs.setAttribute('width','100%'); rs.setAttribute('height','100%'); rs.style.maxHeight='248px'; }
+        }
+        // Landscape viewbox
+        vbShowResultSVG(svgString);
+      }
+
+    // 10i — Show result panel, legend, download button and status
+    function showOffsetResultUI(pathCount, totalNodes) {
+      // Portrait
+      const rp = document.getElementById('result-preview-portrait');
+      if (rp) rp.classList.add('visible');
+      const mrp = document.getElementById('meta-rpaths-portrait');
+      if (mrp) mrp.textContent = pathCount;
+      const mrs = document.getElementById('meta-rsamples-portrait');
+      if (mrs) mrs.textContent = totalNodes;
+      const lgp = document.getElementById('legend-portrait');
+      if (lgp) lgp.style.display = 'flex';
+      const dlcp = document.getElementById('dl-path-checks-portrait');
+      if (dlcp) dlcp.style.display = 'flex';
+      const dbp = document.getElementById('download-btn-portrait');
+      if (dbp) dbp.style.display = 'block';
+
+      // Landscape: show legend, checkboxes, download
+      const legend = document.getElementById('legend');
+      if (legend) legend.style.display = 'flex';
+      const dlChecks = document.getElementById('dl-path-checks');
+      if (dlChecks) dlChecks.style.display = 'flex';
+      const dlBtn = document.getElementById('download-btn');
+      if (dlBtn) dlBtn.style.display = 'block';
+
+      // Landscape viewbox meta
+      vbSetResultMeta(pathCount, totalNodes);
+
+      document.getElementById('remove-loops-btn').disabled  = false;
+      document.getElementById('cmrom-debug-btn').style.display = 'block';
+      setStatus(`done — ${pathCount} path${pathCount !== 1 ? 's' : ''}, ${totalNodes} nodes`, 'ok');
+      initCmromDebug();
+    }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 11 — FIND AND INSERT CROSSINGS
+   Detect self-intersections in an offset point array,
+   then insert crossing markers at the correct positions.
+════════════════════════════════════════════════════════ */
+
+  // 11a — Test two line segments for intersection → {x,y} or null
+  function segCross(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {
+    const dx1 = ax2-ax1, dy1 = ay2-ay1;
+    const dx2 = bx2-bx1, dy2 = by2-by1;
+    const den = dx1*dy2 - dy1*dx2;
+    if (Math.abs(den) < 1e-10) return null;
+    const t = ((bx1-ax1)*dy2 - (by1-ay1)*dx2) / den;
+    const u = ((bx1-ax1)*dy1 - (by1-ay1)*dx1) / den;
+    if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+    return { x: ax1 + t*dx1, y: ay1 + t*dy1 };
+  }
+
+  // Loose version for curve-loop detection: allows t and u slightly outside [0,1]
+  // so that crossings falling just between densely-sampled points are not missed.
+  function segCrossLoose(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {
+    const dx1 = ax2-ax1, dy1 = ay2-ay1;
+    const dx2 = bx2-bx1, dy2 = by2-by1;
+    const den = dx1*dy2 - dy1*dx2;
+    if (Math.abs(den) < 1e-10) return null;
+    const t = ((bx1-ax1)*dy2 - (by1-ay1)*dx2) / den;
+    const u = ((bx1-ax1)*dy1 - (by1-ay1)*dx1) / den;
+    const eps = 0.15;
+    if (t < -eps || t > 1+eps || u < -eps || u > 1+eps) return null;
+    // Clamp result to segment for a clean intersection point
+    const tc = Math.max(0, Math.min(1, t));
+    return { x: ax1 + tc*dx1, y: ay1 + tc*dy1 };
+  }
+
+  // 11b — Walk all non-adjacent segment pairs and return crossing points
+  function findCrossings(pts) {
+    const n    = pts.length;
+    const hits = [];
+
+    // Single corner-centric pass.
+    // Find each corner pair: two adjacent node points sharing the same nodeIdx.
+    // This covers all four segment-type combinations at a corner:
+    //   straight↔straight, curve↔curve, straight↔curve, curve↔straight.
+    // For each side of the corner, collect the run of points that forms it:
+    //   - if the side has cmrom points, those form the run (curve side)
+    //   - if not, the single node just outside the corner pair is the endpoint
+    //     and we synthesise a one-segment run [outsideNode, cornerNode] (straight side)
+    // Then test every segment in the before-run against every segment in the after-run.
+    for (let c = 0; c < n; c++) {
+      const c1 = (c + 1) % n;
+      if (pts[c].type  !== 'node') continue;
+      if (pts[c1].type !== 'node') continue;
+      if (pts[c].nodeIdx !== pts[c1].nodeIdx) continue;
+
+      // walk backwards from c to collect the before-side run (indices, oldest first)
+      const beforeRun = [];
+      let b = (c - 1 + n) % n;
+      while (pts[b].type === 'cmrom' && b !== c1) {
+        beforeRun.unshift(b);
+        b = (b - 1 + n) % n;
+      }
+      // b is now the node just before the corner (or c1 if the whole array is cmrom).
+      // If no cmrom points found, the before-side is a single straight segment.
+      // Represent it as [b, c] so the loop below works uniformly.
+      if (beforeRun.length === 0) {
+        if (b !== c1) beforeRun.push(b);  // guard against degenerate all-cmrom arrays
+      }
+      beforeRun.push(c);   // corner node is the terminal point of the before-side
+
+      // walk forwards from c1 to collect the after-side run (indices, oldest first)
+      const afterRun = [];
+      let a = (c1 + 1) % n;
+      while (pts[a].type === 'cmrom' && a !== c) {
+        afterRun.push(a);
+        a = (a + 1) % n;
+      }
+      // a is now the node just after the corner.
+      // If no cmrom points found, the after-side is a single straight segment.
+      // Prepend c1 and append a so the loop below works uniformly.
+      afterRun.unshift(c1);  // corner node is the start point of the after-side
+      if (a !== c) afterRun.push(a);  // guard against degenerate all-cmrom arrays
+
+      // need at least one segment on each side (i.e. ≥2 indices) to test
+      if (beforeRun.length < 2 || afterRun.length < 2) continue;
+
+      // test each segment in the before-run against each segment in the after-run
+      const cornerNodeIdx = pts[c].nodeIdx;
+      let found = false;
+      for (let bi = 0; bi < beforeRun.length - 1 && !found; bi++) {
+        const p0 = beforeRun[bi], p1 = beforeRun[bi + 1];
+        for (let ai = 0; ai < afterRun.length - 1 && !found; ai++) {
+          const q0 = afterRun[ai], q1 = afterRun[ai + 1];
+          const ix = segCross(pts[p0].x, pts[p0].y, pts[p1].x, pts[p1].y,
+                              pts[q0].x, pts[q0].y, pts[q1].x, pts[q1].y);
+          if (ix) {
+            hits.push({ ...ix, i: p0, j: q0, cornerNodeIdx });
+            found = true;
+          }
+        }
+      }
+    }
+
+
+    dbg('crossings: ' + hits.map(h => `i=${h.i} j=${h.j} (${h.x.toFixed(2)},${h.y.toFixed(2)})`).join(', '));
+    return hits;
+  }
+
+  // 11c — Insert crossing points into the array at their correct positions
+  function insertCrossings(pts, crossings) {
+    if (!crossings.length) return pts;
+
+    let arr = pts.map((p, idx) => ({ ...p, origIdx: idx }));
+    const n = pts.length;
+    const sorted = crossings.slice().sort((a, b) => b.j - a.j || b.i - a.i);
+
+    for (const cx of sorted) {
+      dbg(`cx i=${cx.i} j=${cx.j} pt0origIdx=${arr.findIndex(p=>p.origIdx===0)} arrlen=${arr.length}`);
+      const cornerNodeIdx = cx.cornerNodeIdx ?? pts[(cx.i + 1) % n].nodeIdx;
+
+      const insertOrRetag = (targetIdx, type) => {
+        if (targetIdx < 0) return;
+        const target = arr[targetIdx];
+        if (target.type === 'node' && Math.abs(target.x - cx.x) < 0.01 && Math.abs(target.y - cx.y) < 0.01) {
+          target.type = type;
+          target.nodeIdx = cornerNodeIdx;
+        } else {
+          arr.splice(targetIdx, 0, { x: cx.x, y: cx.y, type, nodeIdx: cornerNodeIdx });
+        }
+      };
+
+      const afterOrigIdx = (cx.j + 1) % n;
+      // When j is the last element, afterOrigIdx wraps to 0 — but internodeafter
+      // must sit after pts[j] (end of array), not before pts[0] (start).
+      if (cx.j + 1 >= n) {
+        arr.push({ x: cx.x, y: cx.y, type: 'internodeafter', nodeIdx: cornerNodeIdx });
+      } else {
+        let insertBeforeJ1 = arr.findIndex(p => p.origIdx === afterOrigIdx);
+        if (insertBeforeJ1 > 0 && arr[insertBeforeJ1 - 1].type === 'internodebefore') {
+          insertBeforeJ1--;
+        }
+        if (insertBeforeJ1 >= 0) insertOrRetag(insertBeforeJ1, 'internodeafter');
+      }
+
+      if (cx.i === n - 1) {
+        // cx.i is the last element; internodebefore belongs just before origIdx=0
+        // (the first corner node), not pushed to the end of the array.
+        const insertBeforeZero = arr.findIndex(p => p.origIdx === 0);
+        if (insertBeforeZero >= 0) {
+          insertOrRetag(insertBeforeZero, 'internodebefore');
+        } else {
+          arr.unshift({ x: cx.x, y: cx.y, type: 'internodebefore', nodeIdx: cornerNodeIdx });
+        }
+      } else {
+        const insertBeforeI1 = arr.findIndex(p => p.origIdx === cx.i + 1);
+        insertOrRetag(insertBeforeI1, 'internodebefore');
+      }
+    }
+
+    // Sort non-cmrom points only within each cmrom-bounded segment.
+    // cmrom runs act as hard dividers — a node must never move across a cmrom run.
+    const typeOrder = { 'internodebefore': 0, 'node': 1, 'internodeafter': 2 };
+
+    // Collect all cornerNodeIdx values that were actually inserted
+    const insertedCornerIdxs = new Set(crossings.map(cx => cx.cornerNodeIdx ?? pts[(cx.i + 1) % n].nodeIdx));
+
+    const segments = [];
+    let curSeg = [];
+    let curIsCmrom = arr.length > 0 && arr[0].type === 'cmrom';
+    for (const p of arr) {
+      const isCmrom = p.type === 'cmrom';
+      if (isCmrom !== curIsCmrom) {
+        segments.push({ cmrom: curIsCmrom, pts: curSeg });
+        curSeg = [];
+        curIsCmrom = isCmrom;
+      }
+      curSeg.push(p);
+    }
+    if (curSeg.length) segments.push({ cmrom: curIsCmrom, pts: curSeg });
+
+    arr = [];
+    for (const s of segments) {
+      if (!s.cmrom) {
+        const out = [];
+        const toSort = [];
+        const indices = [];
+        s.pts.forEach((p, i) => {
+          if (insertedCornerIdxs.has(p.nodeIdx)) {
+            toSort.push(p);
+            indices.push(i);
+          }
+        });
+        toSort.sort((a, b) => {
+          if (a.nodeIdx !== b.nodeIdx) return a.nodeIdx - b.nodeIdx;
+          return (typeOrder[a.type] ?? 1) - (typeOrder[b.type] ?? 1);
+        });
+        let si = 0;
+        s.pts.forEach((p, i) => {
+          if (insertedCornerIdxs.has(p.nodeIdx)) {
+            out.push(toSort[si++]);
+          } else {
+            out.push(p);
+          }
+        });
+        arr.push(...out);
+      } else {
+        arr.push(...s.pts);
+      }
+    }
+
+    return arr;
+  }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 11.5 — REMOVE MID-CURVE LOOPS
+   Detect and remove loops that form entirely within a
+   cmrom run, caused by tight turns in the original path.
+   Operates directly on gStoredInnerArrays / gStoredOuterArrays
+   before corner processing.
+════════════════════════════════════════════════════════ */
+
+  // 11.5 — Master function: scan all arrays, remove curve loops, re-render
+  function removeCurveLoops() {
+    let totalRemoved = 0;
+
+    // Work on the stored arrays in place so the rest of the pipeline
+    // (corner loops, sharp/blunt) sees the cleaned geometry.
+    gCleanedInnerArrays = gCleanedInnerArrays.map((arr, pi) => {
+      const { cleaned, count } = removeCurveLoopsFromArray(arr, pi, 'inner');
+      totalRemoved += count;
+      return cleaned;
+    });
+    gCleanedOuterArrays = gCleanedOuterArrays.map((arr, pi) => {
+      const { cleaned, count } = removeCurveLoopsFromArray(arr, pi, 'outer');
+      totalRemoved += count;
+      return cleaned;
+    });
+
+    if (totalRemoved === 0) {
+      flushDebug();
+      setStatus('no curve loops found', '');
+      return;
+    }
+
+    // Re-render using the existing result renderer (same three-layer SVG)
+    renderCleanedResult(gCleanedOuterArrays, gCleanedInnerArrays);
+    flushDebug();
+    setStatus(`curve loops removed — ${totalRemoved} loop${totalRemoved !== 1 ? 's' : ''}`, 'ok');
+  }
+
+    // 11.5a — Remove curve loops from a single point array.
+    // Returns { cleaned, count } where count is the number of loops removed.
+    function removeCurveLoopsFromArray(arr, pathIdx, side) {
+      let current = arr.slice();
+      let totalCount = 0;
+      const MAX_PASSES = 20; // safety cap against degenerate geometry
+
+      for (let pass = 0; pass < MAX_PASSES; pass++) {
+        const result = removeSingleCurveLoop(current, pathIdx, side, pass);
+        if (!result.found) break;
+        current = result.cleaned;
+        totalCount++;
+      }
+
+      return { cleaned: current, count: totalCount };
+    }
+
+    // 11.5b — Attempt to find and remove exactly one curve loop from the array.
+    // Uses a full-path self-intersection sweep gated by a cheap winding-flip check.
+    // The loop may cross a nodeIdx boundary so we sweep the whole array.
+    // Returns { found: false } if no loop exists, or { found: true, cleaned }.
+    function removeSingleCurveLoop(arr, pathIdx, side, pass) {
+      const n = arr.length;
+      const allIndices = Array.from({ length: n }, (_, i) => i);
+
+      // Step 1: cheap winding-flip pre-filter on the whole array.
+      const hasFlip = runHasWindingFlip(arr, allIndices);
+      dbg(`[11.5diag] ${side} path[${pathIdx}] pass=${pass} n=${n} hasFlip=${hasFlip}`);
+      if (!hasFlip) return { found: false };
+
+      // Step 2: full-path self-intersection sweep (non-adjacent segment pairs only).
+      const crossing = findCurveLoopCrossing(arr, allIndices);
+      dbg(`[11.5diag] ${side} path[${pathIdx}] crossing=${crossing ? "FOUND i="+crossing.i+" j="+crossing.j : "null"}`);
+      if (!crossing) return { found: false };
+
+      // Step 3: excise the loop arc.
+      gDebugCrossingPts.push({ x: crossing.x, y: crossing.y, side, pass });
+      const cleaned = exciseLoopArc(arr, crossing);
+      dbg(`[11.5] ${side} path[${pathIdx}] pass ${pass}: loop removed segs i=${crossing.i} j=${crossing.j} pt=(${crossing.x.toFixed(2)},${crossing.y.toFixed(2)})`);
+      return { found: true, cleaned };
+    }
+
+    // 11.5c — Gather runs of consecutive points sharing the same nodeIdx.
+    // Returns an array of { nodeIdx, indices[] } where indices are positions in arr.
+    // The array is circular so a run that starts near the end and wraps is handled.
+    function gatherNodeIdxRuns(arr) {
+      const n = arr.length;
+      if (n === 0) return [];
+
+      const runs = [];
+      let runStart = 0;
+      let runNodeIdx = arr[0].nodeIdx;
+
+      // Walk once through; collect runs
+      for (let i = 1; i <= n; i++) {
+        const nodeIdx = arr[i % n].nodeIdx;
+        if (nodeIdx !== runNodeIdx || i === n) {
+          // emit run from runStart..(i-1)
+          const indices = [];
+          for (let k = runStart; k < i; k++) indices.push(k % n);
+          runs.push({ nodeIdx: runNodeIdx, indices });
+          runStart = i % n;
+          runNodeIdx = nodeIdx;
+        }
+      }
+
+      // Merge last run into first run if they share the same nodeIdx (wrap-around)
+      if (runs.length > 1 && runs[0].nodeIdx === runs[runs.length - 1].nodeIdx) {
+        const last = runs.pop();
+        runs[0].indices = [...last.indices, ...runs[0].indices];
+      }
+
+      return runs;
+    }
+
+    // 11.5d — Check whether a run of point indices contains a winding-direction flip.
+    // Computes the cross product at each interior triple. If the sign ever flips
+    // relative to the first non-zero cross product, a reversal is present.
+    // Uses a scale-adaptive epsilon so nearly-collinear triplets in tight hairpin
+    // remnants don't produce false positives after real loops have been removed.
+    function runHasWindingFlip(arr, indices) {
+      if (indices.length < 3) return false;
+      // Compute bounding-box scale to make the epsilon relative to the geometry.
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const i of indices) {
+        if (arr[i].x < minX) minX = arr[i].x;
+        if (arr[i].x > maxX) maxX = arr[i].x;
+        if (arr[i].y < minY) minY = arr[i].y;
+        if (arr[i].y > maxY) maxY = arr[i].y;
+      }
+      const scale = Math.max(maxX - minX, maxY - minY, 1e-6);
+      const EPS = scale * scale * 1e-6; // cross product has units of area
+
+      let refSign = 0;
+      for (let i = 0; i < indices.length - 2; i++) {
+        const a = arr[indices[i]];
+        const b = arr[indices[i + 1]];
+        const c = arr[indices[i + 2]];
+        const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+        if (Math.abs(cross) < EPS) continue;
+        const sign = cross > 0 ? 1 : -1;
+        if (refSign === 0) { refSign = sign; continue; }
+        if (sign !== refSign) return true;
+      }
+      return false;
+    }
+
+    // 11.5e — Sweep all non-adjacent segment pairs within the run for an intersection.
+    // Returns { i, j, x, y } (segment start indices into arr, and crossing coordinate)
+    // or null if no crossing is found.
+    // We skip adjacent segments (share an endpoint) — they always mathematically touch.
+    // We also skip any segment that starts or ends on a crvstop point: those are
+    // freshly-inserted crossing points whose neighbours are nearly coincident, so they
+    // produce phantom zero-area intersections on the very next pass.
+    function findCurveLoopCrossing(arr, indices) {
+      const m = indices.length;
+      const isProtected = t => t === 'crvstop' || t === 'node'
+                            || t === 'internodebefore' || t === 'internodeafter'
+                            || t === 'arcnode';
+      for (let a = 0; a < m - 1; a++) {
+        const ia0 = indices[a],     ia1 = indices[a + 1];
+        if (isProtected(arr[ia0].type) || isProtected(arr[ia1].type)) continue;
+        const ax1 = arr[ia0].x, ay1 = arr[ia0].y;
+        const ax2 = arr[ia1].x, ay2 = arr[ia1].y;
+        for (let b = a + 2; b < m - 1; b++) {
+          if (a === 0 && b === m - 2) continue;
+          const ib0 = indices[b],     ib1 = indices[b + 1];
+          if (isProtected(arr[ib0].type) || isProtected(arr[ib1].type)) continue;
+          const bx1 = arr[ib0].x, by1 = arr[ib0].y;
+          const bx2 = arr[ib1].x, by2 = arr[ib1].y;
+          const ix = segCrossLoose(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2);
+          if (ix) {
+            return { i: ia0, j: ib0, x: ix.x, y: ix.y };
+          }
+        }
+      }
+      return null;
+    }
+
+    // 11.5f — Compute the signed area (shoelace) of the whole array.
+    // Positive = CCW in SVG coords (y-down), negative = CW.
+    function computeArrayWinding(arr) {
+      let area = 0;
+      const n = arr.length;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        area += arr[i].x * arr[j].y - arr[j].x * arr[i].y;
+      }
+      return area; // sign is what matters; positive = CCW
+    }
+
+    // 11.5g — Excise the loop arc from the array.
+    // The crossing splits the closed polygon into two arcs:
+    //   arc A: crossing → ... → crossing going forward from i to j
+    //   arc B: crossing → ... → crossing going forward from j back to i
+    // The loop is the arc whose signed area opposes the overall winding.
+    // We replace the whole loop arc with a single point at the crossing.
+    function exciseLoopArc(arr, crossing) {
+      const n = arr.length;
+      const { i, j, x, y } = crossing;
+
+      // Collect the two arcs as index sequences.
+      // Arc A: i+1 .. j  (the forward arc between the two crossing segments)
+      // Arc B: j+1 .. i  (the rest of the polygon, wrapping)
+      const arcA = [];
+      for (let k = (i + 1) % n; k !== (j + 1) % n; k = (k + 1) % n) {
+        arcA.push(k);
+        if (arcA.length > n) break; // safety
+      }
+      const arcB = [];
+      for (let k = (j + 1) % n; k !== (i + 1) % n; k = (k + 1) % n) {
+        arcB.push(k);
+        if (arcB.length > n) break;
+      }
+
+      // Compute signed area of each arc by forming a mini-polygon:
+      // crossing point → arc points → crossing point
+      const arcArea = (indices) => {
+        const pts = [{ x, y }, ...indices.map(k => arr[k])];
+        let a = 0;
+        for (let m = 0; m < pts.length; m++) {
+          const p = pts[m], q = pts[(m + 1) % pts.length];
+          a += p.x * q.y - q.x * p.y;
+        }
+        return a;
+      };
+
+      const areaA = arcArea(arcA);
+      const areaB = arcArea(arcB);
+
+      // The loop is always a small detour; the valid path is the large majority.
+      // Drop whichever arc has the smaller absolute area — that is the loop.
+      const dropA = Math.abs(areaA) < Math.abs(areaB);
+      const dropIndices = new Set(dropA ? arcA : arcB);
+      const dropArr = dropA ? arcA : arcB;
+      const isProtected = t => t === 'node' || t === 'internodebefore'
+                            || t === 'internodeafter' || t === 'arcnode';
+      if (dropArr.some(k => isProtected(arr[k].type))) {
+        dbg(`[excise] aborted — drop arc contains protected node type`);
+        return { aborted: true };
+      }
+
+      dbg(`[excise] crossing i=${i} j=${j} pt=(${x.toFixed(3)},${y.toFixed(3)}) dropA=${dropA} areaA=${areaA.toFixed(1)} areaB=${areaB.toFixed(1)}`);
+      dbg(`[excise] arr[i  ]=(${arr[i].x.toFixed(3)},${arr[i].y.toFixed(3)}) t=${arr[i].type||'?'}`
+        + `  arr[i+1]=(${arr[(i+1)%n].x.toFixed(3)},${arr[(i+1)%n].y.toFixed(3)}) t=${arr[(i+1)%n].type||'?'}`);
+      dbg(`[excise] arr[j  ]=(${arr[j].x.toFixed(3)},${arr[j].y.toFixed(3)}) t=${arr[j].type||'?'}`
+        + `  arr[j+1]=(${arr[(j+1)%n].x.toFixed(3)},${arr[(j+1)%n].y.toFixed(3)}) t=${arr[(j+1)%n].type||'?'}`);
+
+      // The crossing point inherits nodeIdx from the point just after the cut.
+      // We also capture the two surviving neighbours that bracket it, so ptsToPath
+      // can use them as Catmull-Rom phantoms instead of computing them from scratch.
+      //
+      // dropA: loop is arcA (i+1..j), surviving run is arr[j+1]→arr[i]
+      //   phantomBefore = arr[i]      (last surviving point before the crossing)
+      //   phantomAfter  = arr[j+1]    (first surviving point after the crossing)
+      //
+      // dropB: loop is arcB (j+1..i), surviving run is arr[i+1]→arr[j]
+      //   phantomBefore = arr[j]      (last surviving point before the crossing)
+      //   phantomAfter  = arr[i+1]    (first surviving point after the crossing)
+      const phantomBefore = dropA ? arr[i]           : arr[j];
+      const phantomAfter  = dropA ? arr[(j+1) % n]   : arr[(i+1) % n];
+
+      dbg(`[excise] phantomBefore=(${phantomBefore.x.toFixed(3)},${phantomBefore.y.toFixed(3)}) t=${phantomBefore.type||'?'}`
+        + `  phantomAfter=(${phantomAfter.x.toFixed(3)},${phantomAfter.y.toFixed(3)}) t=${phantomAfter.type||'?'}`);
+
+      const crossPt = {
+        x, y,
+        type: 'crvstop',
+        nodeIdx: arr[(i + 1) % n].nodeIdx,
+        phantomBefore,
+        phantomAfter
+      };
+
+      // Rebuild the array keeping only the non-loop arc plus the crossing point.
+      // dropA: loop is arcA (i+1..j) → insert crossPt after i, skip i+1..j
+      // dropB: loop is arcB (j+1..i) → insert crossPt after j, skip j+1..i
+      const result = [];
+
+      if (dropA) {
+        for (let k = 0; k < n; k++) {
+          if (k === i) { result.push(arr[k]); result.push(crossPt); continue; }
+          if (dropIndices.has(k)) continue;
+          if (k === j) continue;
+          result.push(arr[k]);
+        }
+      } else {
+        for (let k = 0; k < n; k++) {
+          if (k === j) { result.push(arr[k]); result.push(crossPt); continue; }
+          if (dropIndices.has(k)) continue;
+          if (k === i) continue;
+          result.push(arr[k]);
+        }
+      }
+
+      // Log crossPt position in result and its immediate neighbours
+      const ci = result.findIndex(p => p === crossPt);
+      if (ci >= 0) {
+        const rPrev = result[(ci - 1 + result.length) % result.length];
+        const rNext = result[(ci + 1) % result.length];
+        dbg(`[excise] crossPt at result[${ci}]/${result.length}`
+          + `  prev=(${rPrev.x.toFixed(3)},${rPrev.y.toFixed(3)}) t=${rPrev.type||'?'}`
+          + `  next=(${rNext.x.toFixed(3)},${rNext.y.toFixed(3)}) t=${rNext.type||'?'}`);
+      }
+
+      return result;
+    }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 12 — REMOVE INNER CORNER LOOPS
+   Walk cleaned arrays, drop the two looping nodes
+   between each internodebefore / internodeafter pair.
+════════════════════════════════════════════════════════ */
+
+  // 12 — Master function: remove loops from all paths
+  function removeInnerCornerLoops() {
+    gCleanedInnerArrays = gStoredInnerArrays.map(removeLoopsFromArray);
+    gCleanedOuterArrays = gStoredOuterArrays.map(removeLoopsFromArray);
+
+    renderCleanedResult(gCleanedOuterArrays, gCleanedInnerArrays);
+    document.getElementById('remove-curve-loops-btn').disabled = false;
+    dumpCleanedArrays();
+    flushDebug();
+
+    const count = gCleanedInnerArrays.length;
+    setStatus(`loops removed — ${count} path${count !== 1 ? 's' : ''}`, 'ok');
+    document.getElementById('sharp-corners-btn').disabled = false;
+    document.getElementById('blunt-corners-btn').disabled = false;
+  }
+
+    // 12a — Remove loop points from a single point array
+    function removeLoopsFromArray(arr) {
+      const n    = arr.length;
+      const drop = new Set();
+      for (let i = 0; i < n; i++) {
+        if (arr[i].type !== 'internodebefore') continue;
+        if (drop.has(i)) continue;
+        const px = arr[i].x, py = arr[i].y;
+        // walk forward to find the matching internodeafter
+        for (let k = 1; k < n; k++) {
+          const j = (i + k) % n;
+          if (arr[j].type === 'internodeafter') {
+            if (Math.abs(arr[j].x - px) < 0.5 && Math.abs(arr[j].y - py) < 0.5) {
+              // The loop body is whichever arc is longer.
+              // Short arc: internodebefore→internodeafter forward = k points.
+              // Long arc:  internodeafter→internodebefore forward = n-k points.
+              // Drop the longer arc — it is the excursion we want to remove.
+              if (k <= n - k) {
+                // short arc is forward: normal case, drop between them
+                for (let d = 1; d <= k; d++) drop.add((i + d) % n);
+              } else {
+                // short arc is the reverse: loop body goes the long way forward,
+                // so drop from internodeafter onward back to internodebefore
+                for (let d = 1; d < n - k; d++) drop.add((j + d) % n);
+                drop.add(i);  // drop the internodebefore itself too
+              }
+            }
+            break;
+          }
+        }
+      }
+      return arr.filter((_, i) => !drop.has(i));
+    }
+
+    // 12a-DEBUG — Dump cleaned arrays grouped by nodeIdx after loop removal
+    function dumpCleanedArrays() {
+      const label = ['INNER', 'OUTER'];
+      [gCleanedInnerArrays, gCleanedOuterArrays].forEach((arrays, ai) => {
+        arrays.forEach((arr, pi) => {
+          dbg(`\n══ POST-LOOP ${label[ai]} path[${pi}] — ${arr.length} pts ══`);
+          // group by nodeIdx
+          const byNode = {};
+          arr.forEach((pt, k) => {
+            const ni = pt.nodeIdx ?? '?';
+            if (!byNode[ni]) byNode[ni] = [];
+            const extra = pt.type === 'crvstop'
+              ? ` pB=(${pt.phantomBefore?.x.toFixed(2)},${pt.phantomBefore?.y.toFixed(2)}) pA=(${pt.phantomAfter?.x.toFixed(2)},${pt.phantomAfter?.y.toFixed(2)})`
+              : '';
+            byNode[ni].push({ k, type: pt.type || 'node', x: pt.x, y: pt.y, extra });
+          });
+          Object.keys(byNode).sort((a,b) => Number(a)-Number(b)).forEach(ni => {
+            const pts = byNode[ni];
+            const summary = pts.map(p => `[${p.k}]${p.type}${p.extra||''}`).join(' ');
+            dbg(`  nodeIdx=${ni}: ${summary}`);
+          });
+          // also log the node kinds from gStoredNodesArrays
+          const nodes = gStoredNodesArrays[pi];
+          if (nodes) {
+            dbg(`  --- original node kinds ---`);
+            nodes.forEach((n, i) => dbg(`  node[${i}] ${n.kind}  in=${deg(n.angleIn)} out=${deg(n.angleOut)}`));
+          }
+        });
+      });
+    }
+
+    // 12b — Build SVG string from cleaned outer and inner arrays
+    function buildCleanedSVGString(outerArrays, innerArrays) {
+      const vbParts = (gStoredViewBox || '0 0 100 100').split(/[\s,]+/).map(Number);
+      const svgW = vbParts[2] || 100, svgH = vbParts[3] || 100;
+      const dotR = Math.max(svgW, svgH) * NODE_DOT_RADIUS_FRACTION;
+      // Use gStoredSW as the radius baseline for debug dots — it's already scaled
+      // to the geometry, so dots will be clearly visible regardless of viewBox size.
+      const xR = Math.max(dotR, gStoredSW) * 2.5;
+      let out = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${gStoredViewBox}" width="${svgW}" height="${svgH}">`;
+      out += `\n  <g id="original">`;
+      gStoredOriginal.forEach(d => { out += `\n    <path d="${d}" fill="none" stroke="#555" stroke-width="${gStoredSW}"/>`; });
+      out += `\n  </g>\n  <g id="outer">`;
+      outerArrays.forEach((arr, idx) => { out += `\n    <path d="${ptsToPath(arr, idx)}" fill="none" stroke="#33cc55" stroke-width="${gStoredSW}"/>`; });
+      out += `\n  </g>\n  <g id="inner">`;
+      innerArrays.forEach((arr, idx) => { out += `\n    <path d="${ptsToPath(arr, idx)}" fill="none" stroke="#ff3333" stroke-width="${gStoredSW}"/>`; });
+      out += `\n  </g>\n  <g id="nodes">`;
+      gStoredNodesArrays.forEach(nodes => {
+        nodes.forEach(n => { out += `\n    <circle cx="${n.x}" cy="${n.y}" r="${dotR}" fill="${NODE_DOT_COLOR_RESULT}" opacity="0.8"/>`; });
+      });
+      out += `\n  </g>`;
+      if (gDebugCrossingPts.length > 0) {
+        out += `\n  <g id="debug-crossings">`;
+        gDebugCrossingPts.forEach(p => {
+          out += `\n    <circle cx="${p.x.toFixed(4)}" cy="${p.y.toFixed(4)}" r="${xR.toFixed(4)}" fill="white" opacity="0.9"/>`;
+        });
+        out += `\n  </g>`;
+      }
+      // Invalid paths layer: orange display-only paths, stripped at download
+      if (gLoadedSVGDoc) {
+        const invalidPaths = gLoadedSVGDoc.querySelectorAll('path[data-invalid]');
+        if (invalidPaths.length > 0) {
+          out += `\n  <g id="invalid-paths">`;
+          invalidPaths.forEach(p => {
+            out += `\n    <path d="${p.getAttribute('d')}" fill="none" stroke="#ff8800" stroke-width="${gStoredSW}" data-invalid="1"/>`;
+          });
+          out += `\n  </g>`;
+        }
+      }
+      out += `\n</svg>`;
+      return out;
+    }
+
+    // 12c — Build cleaned SVG string and push it to the result preview
+    function renderCleanedResult(outerArrays, innerArrays) {
+      const svgString = buildCleanedSVGString(outerArrays, innerArrays);
+      gOutputSVGText  = svgString;
+      displayResultSVG(svgString);
+    }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 13 — SHARP CORNERS
+   For each internodebefore corner: sweep the tangent table
+   at 5° steps between the two flanking angles, placing
+   the beam centre on the original node.
+════════════════════════════════════════════════════════ */
+
+  // 13 — Master function: apply sharp corners
+  function applySharpCorners() {
+    if (!gCleanedInnerArrays.length || !gStoredTable || !gStoredNodesArrays.length) return;
+
+    const sharpOuter = gCleanedOuterArrays.map((arr, idx) => fixSharpCornersOnPath(gCleanedInnerArrays[idx], arr, idx, false, gStoredWindings[idx]));
+    const sharpInner = gCleanedInnerArrays.map((arr, idx) => fixSharpCornersOnPath(gCleanedOuterArrays[idx], arr, idx, true,  gStoredWindings[idx]));
+
+    renderCleanedResult(sharpOuter, sharpInner);
+    setStatus('sharp corners applied', 'ok');
+    flushDebug();
+  }
+
+    // 13a — Fix corners on one path (sharp version: beam centred on node)
+    function fixSharpCornersOnPath(sourceArr, targetArr, pathIdx, isInner, leftIsOuter) {
+      const nodes = gStoredNodesArrays[pathIdx];
+      if (!nodes) return targetArr;
+
+      const cornerIdxs  = collectCornerIdxs(sourceArr, targetArr);
+      if (!cornerIdxs.size) return targetArr;
+
+      const internodeMap = buildInternodeMap(sourceArr, targetArr);
+
+      return sweepCornerArcs(targetArr, nodes, cornerIdxs, internodeMap, isInner, 1, leftIsOuter);
+    }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 14 — BLUNT CORNERS
+   Same as sharp corners but:
+   1. Beam centred on internodebefore point (not the node)
+   2. All radius values from lookup table are ×2
+════════════════════════════════════════════════════════ */
+
+  // 14 — Master function: apply blunt corners
+  function applyBluntCorners() {
+    if (!gCleanedInnerArrays.length || !gStoredTable || !gStoredNodesArrays.length) return;
+
+    const bluntOuter = gCleanedOuterArrays.map((arr, idx) => fixBluntCornersOnPath(gCleanedInnerArrays[idx], arr, idx, false, gStoredWindings[idx]));
+    const bluntInner = gCleanedInnerArrays.map((arr, idx) => fixBluntCornersOnPath(gCleanedOuterArrays[idx], arr, idx, true,  gStoredWindings[idx]));
+
+    renderCleanedResult(bluntOuter, bluntInner);
+    setStatus('blunt corners applied', 'ok');
+  }
+
+    // 14a — Fix corners on one path (blunt version: beam centred on internodebefore, radius ×2)
+    function fixBluntCornersOnPath(sourceArr, targetArr, pathIdx, isInner, leftIsOuter) {
+      const nodes = gStoredNodesArrays[pathIdx];
+      if (!nodes) return targetArr;
+
+      const cornerIdxs  = collectCornerIdxs(sourceArr, targetArr);
+      if (!cornerIdxs.size) return targetArr;
+
+      const internodeMap = buildInternodeMap(sourceArr, targetArr);
+
+      return sweepCornerArcs(targetArr, nodes, cornerIdxs, internodeMap, isInner, 2, leftIsOuter);
+    }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 15 — SHARED CORNER SWEEP HELPERS
+   Used by both sharp (Task 13) and blunt (Task 14).
+════════════════════════════════════════════════════════ */
+
+  // 15a — Collect all nodeIdx values that have an internodebefore in either array.
+  //       Straight corners: source has internodebefore, target has node-pair (or vice versa).
+  //       Curved corners with no crossing on one side: only the inner side has internodebefore,
+  //       so we must check both arrays to catch it regardless of which is source/target.
+  function collectCornerIdxs(sourceArr, targetArr) {
+    const cornerIdxs = new Set();
+    sourceArr.forEach(pt => {
+      if (pt.type === 'internodebefore' && pt.nodeIdx != null) cornerIdxs.add(pt.nodeIdx);
+    });
+    targetArr.forEach(pt => {
+      if (pt.type === 'internodebefore' && pt.nodeIdx != null) cornerIdxs.add(pt.nodeIdx);
+    });
+    return cornerIdxs;
+  }
+
+  // 15b — Build a map from nodeIdx → internodebefore point.
+  //       Prefer sourceArr (the opposite offset, whose crossing point is the geometric centre).
+  //       Fall back to targetArr for curved corners where only the target side has a crossing.
+  function buildInternodeMap(sourceArr, targetArr) {
+    const internodeMap = {};
+    // source first (preferred)
+    sourceArr.forEach(pt => {
+      if (pt.type === 'internodebefore' && pt.nodeIdx != null) internodeMap[pt.nodeIdx] = pt;
+    });
+    // target as fallback — only fills gaps not already set by source
+    targetArr.forEach(pt => {
+      if (pt.type === 'internodebefore' && pt.nodeIdx != null && !internodeMap[pt.nodeIdx])
+        internodeMap[pt.nodeIdx] = pt;
+    });
+    return internodeMap;
+  }
+
+  // 15c — Walk targetArr, replace corner node pairs with swept arc points.
+  //       For outer path: finds two adjacent node points with same nodeIdx.
+  //       For inner path: finds internodebefore where node pair was dropped by loop removal.
+  //       radiusMultiplier: 1 = sharp (node centre), 2 = blunt (internode centre, ×2 radius)
+  function sweepCornerArcs(targetArr, nodes, cornerIdxs, internodeMap, isInner, radiusMultiplier, leftIsOuter) {
+    const result = [];
+    const n      = targetArr.length;
+    let skipCount = 0;  // number of extra targetArr entries to skip after i
+
+    const dist2 = (a, b) => (a.x-b.x)**2 + (a.y-b.y)**2;
+
+    for (let i = 0; i < n; i++) {
+      if (skipCount > 0) { skipCount--; continue; }
+
+      const pt   = targetArr[i];
+      const next = targetArr[(i + 1) % n];
+
+      // Outer path: two adjacent node points with same nodeIdx — straight or curved corner
+      const isCornerPair = pt.type   === 'node'
+        && next.type === 'node'
+        && pt.nodeIdx != null
+        && pt.nodeIdx === next.nodeIdx
+        && cornerIdxs.has(pt.nodeIdx);
+
+      if (isCornerPair) {
+        const node        = nodes[pt.nodeIdx];
+        const internodePt = internodeMap[pt.nodeIdx];
+        if (node && internodePt) {
+          const arcPts = buildArcPoints(node, internodePt, isInner, radiusMultiplier, pt.nodeIdx, leftIsOuter);
+          dbg(`sweepCornerArcs isCornerPair nodeIdx=${pt.nodeIdx} isInner=${isInner} arcPts=${arcPts.length} centre=(${(radiusMultiplier===1?node.x:internodePt.x).toFixed(2)},${(radiusMultiplier===1?node.y:internodePt.y).toFixed(2)}) a0=${deg(node.angleIn)} a1=${deg(node.angleOut)}`);
+
+          // Trim result: pop any cmrom points that overshoot past the arc start.
+          // A cmrom point overshoots if it is closer to the first corner node (pt)
+          // than the arc's own start point is.
+          const arcStartDist2 = dist2(arcPts[0], pt);
+          while (result.length > 0) {
+            const last = result[result.length - 1];
+            if (last.type === 'cmrom' && dist2(last, pt) < arcStartDist2) {
+              result.pop();
+            } else {
+              break;
+            }
+          }
+
+          // Push the arc points
+          arcPts.forEach(p => result.push(p));
+
+          // Skip next (second corner node) plus any cmrom points in targetArr
+          // that overshoot past the arc end — closer to next than the arc end is.
+          // Uses modular indexing to handle the wrap-around case where the
+          // overrunning cmroms have wrapped to the start of the array (already
+          // emitted into result) — those are trimmed from the front of result.
+          skipCount = 1; // always skip next (the second corner node)
+          const arcEndDist2 = dist2(arcPts[arcPts.length - 1], next);
+          let j = i + 2;
+          let wrappedTrimCount = 0;
+          while (j < i + 2 + n) {  // allow full wrap but never more than n steps
+            const jMod = j % n;
+            const ahead = targetArr[jMod];
+            if (ahead.type === 'cmrom' && dist2(ahead, next) < arcEndDist2) {
+              if (jMod < i) {
+                // This index was already emitted at the start of the loop —
+                // trim it from the front of result instead of using skipCount.
+                wrappedTrimCount++;
+              } else {
+                skipCount++;
+              }
+              j++;
+            } else {
+              break;
+            }
+          }
+          // Remove the wrapped-around cmroms from the front of result.
+          if (wrappedTrimCount > 0) {
+            result.splice(0, wrappedTrimCount);
+          }
+
+          continue;
+        }
+      }
+
+      result.push(pt);
+    }
+    return result;
+  }
+
+    // 15c-i — Build the arc point array for one corner
+    function buildArcPoints(node, internodePt, isInner, radiusMultiplier, nodeIdx, leftIsOuter) {
+      const a0 = node.angleIn;
+      const a1 = node.angleOut;
+
+      let diff = a1 - a0;
+      while (diff >  Math.PI) diff -= 2 * Math.PI;
+      while (diff <= -Math.PI) diff += 2 * Math.PI;
+
+      // For a CW shape (leftIsOuter=true): outer corners turn right (diff<0),
+      // inner corners turn left (diff>0) — step sign follows diff naturally.
+      // For a CCW shape (leftIsOuter=false): the same node's diff has the
+      // opposite sign relative to its geometric role, so we must flip the step
+      // direction to sweep the arc the correct way around the beam cross-section.
+      const windingFlip = 1;
+      const stepRad = windingFlip * (diff > 0 ? 1 : -1) * 5 * Math.PI / 180;
+      const steps   = Math.abs(Math.round(diff / stepRad));
+
+      // Sharp: centre on original corner node
+      // Blunt: centre on internodebefore point
+      const centreX = radiusMultiplier === 1 ? node.x : internodePt.x;
+      const centreY = radiusMultiplier === 1 ? node.y : internodePt.y;
+
+      const arcPts = [];
+      for (let s = 0; s <= steps; s++) {
+        const angle       = a0 + s * stepRad;
+        const lookupAngle = (isInner !== !leftIsOuter) ? angle + Math.PI : angle;
+        const tp          = tangentTableLookup(gStoredTable, lookupAngle);
+        arcPts.push({
+          x: centreX + tp.x * radiusMultiplier,
+          y: centreY + tp.y * radiusMultiplier,
+          type: 'arcnode',
+          nodeIdx
+        });
+      }
+      arcPts[0].type                    = 'node';
+      arcPts[arcPts.length - 1].type    = 'node';
+      return arcPts;
+    }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 16 — DOWNLOAD
+   Save the current output SVG to disk.
+════════════════════════════════════════════════════════ */
+
+  // 16 — Trigger SVG file download (filtered by checkboxes, node dots stripped)
+  function downloadSVG() {
+    if (!gOutputSVGText) return;
+
+    // Read checkbox state — landscape ids first, fall back to portrait
+    const wantInner    = (document.getElementById('dl-inner')    || document.getElementById('dl-inner-portrait')    || {checked:true}).checked;
+    const wantOriginal = (document.getElementById('dl-original') || document.getElementById('dl-original-portrait') || {checked:true}).checked;
+    const wantOuter    = (document.getElementById('dl-outer')    || document.getElementById('dl-outer-portrait')    || {checked:true}).checked;
+
+    // Parse the stored SVG, filter groups, strip node dots & merge overlay
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(gOutputSVGText, 'image/svg+xml');
+    const svg = doc.querySelector('svg');
+    if (!svg) return;
+
+    // Remove nodes group and any merge overlay always
+    ['nodes','merge-overlay-ls','merge-overlay','invalid-paths'].forEach(id => {
+      const el = svg.getElementById(id) || doc.getElementById(id);
+      if (el) el.remove();
+    });
+    // Also strip any loose circles (merge dots injected into raw SVG clone)
+    svg.querySelectorAll('circle').forEach(c => c.remove());
+    // Strip any loose invalid (orange) paths — belt-and-braces
+    svg.querySelectorAll('path[data-invalid]').forEach(p => p.remove());
+    // Strip invalid (orange) paths — display only, not for output
+    svg.querySelectorAll('path[data-invalid]').forEach(p => p.remove());
+
+    // Remove unwanted path groups
+    if (!wantOriginal) { const g = svg.getElementById('original'); if (g) g.remove(); }
+    if (!wantOuter)    { const g = svg.getElementById('outer');    if (g) g.remove(); }
+    if (!wantInner)    { const g = svg.getElementById('inner');    if (g) g.remove(); }
+
+    const svgText = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([svgText], { type:'image/svg+xml' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href: url, download: 'kerf_offset.svg' });
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 17 — DEBUG LOGGER
+   Lightweight logging helpers used throughout the pipeline.
+════════════════════════════════════════════════════════ */
+
+  function dbg(msg)    { gDebugLines.push(msg); }
+  function clearDebug(){ gDebugLines = []; gDebugCrossingPts = []; }
+  function flushDebug() {
+    const el = document.getElementById('debug-log');
+    const lb = document.getElementById('debug-label');
+    el.value = gDebugLines.join('\n');
+    el.style.display = 'block';
+    lb.style.display = 'flex';
+  }
+  function deg(r) { return (r * 180 / Math.PI).toFixed(2) + '°'; }
+  function fpt(p) { return '(' + p.x.toFixed(3) + ', ' + p.y.toFixed(3) + ')'; }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 18 — UI STATUS HELPER
+   Single place to set the status bar text and style.
+════════════════════════════════════════════════════════ */
+
+  // 18 — Set status bar text and class ('', 'ok', or 'error')
+  function setStatus(text, type) {
+    const el = document.getElementById('status');
+    el.className   = type ? 'status ' + type : 'status';
+    el.textContent = text;
+  }
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 19 — EVENT WIRING
+   All button clicks and input events in one place.
+════════════════════════════════════════════════════════ */
+
+  function setupEventListeners() {
+    wireDragAndDrop();
+    wireFileInput();
+    wireClearButton();
+    wireBeamInputs();
+    wireActionButtons();
+  }
+
+    // 19a — Drag and drop onto the drop zone
+    function wireDragAndDrop() {
+      const dropZone = document.getElementById('drop-zone');
+      dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+      dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('dragover'));
+      dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files[0]) {
+          if (gVb && gVb.hasSVG && !confirm('Load new SVG? All current work will be lost.')) return;
+          document.getElementById('merge-slider').value = 0;
+          document.getElementById('merge-slider-val').textContent = '0.00mm';
+          if (gVb && gVb.mode === 'result') resetToImportView();
+          if (gVb) gVb.hasSVG = false;
+          loadSVG(e.dataTransfer.files[0]);
+        }
+      });
+    }
+
+    // 19b — File picker input
+    function wireFileInput() {
+      const fileInput = document.getElementById('svg-file');
+      fileInput.addEventListener('change', () => {
+        if (fileInput.files[0]) {
+          if (gVb && gVb.hasSVG && !confirm('Load new SVG? All current work will be lost.')) {
+            fileInput.value = '';
+            return;
+          }
+          // Reset merge slider and kerf result state for the new shape
+          document.getElementById('merge-slider').value = 0;
+          document.getElementById('merge-slider-val').textContent = '0.00mm';
+          if (gVb && gVb.mode === 'result') resetToImportView();
+          if (gVb) gVb.hasSVG = false;
+          loadSVG(fileInput.files[0]);
+        }
+      });
+    }
+
+    // 19c — Clear button: reset all SVG state and hide panels
+    function wireClearButton() {
+      // landscape clear (in vb-meta bar)
+      const lsClear = document.getElementById('clear-btn');
+      if (lsClear) lsClear.addEventListener('click', () => { resetSVGState(); resetClearButtonUI(); });
+      // portrait clear
+      const pClear = document.getElementById('clear-btn-portrait');
+      if (pClear) pClear.addEventListener('click', () => { resetSVGState(); resetClearButtonUI(); });
+      // portrait download
+      const pDl = document.getElementById('download-btn-portrait');
+      if (pDl) pDl.addEventListener('click', downloadSVG);
+
+    }
+
+      // 19c-i — Reset all loaded SVG globals
+      function resetSVGState() {
+        gLoadedSVGDoc  = null;
+        gLoadedViewBox = null;
+        gOutputSVGText = '';
+      }
+
+      // 19c-ii — Hide panels and reset UI elements after clear
+      function resetClearButtonUI() {
+        // Portrait
+        ['svg-preview-portrait','result-preview-portrait'].forEach(id => {
+          const el = document.getElementById(id); if (el) el.classList.remove('visible');
+        });
+        const spi = document.getElementById('svg-preview-inner-portrait');
+        if (spi) spi.innerHTML = '';
+        const lgp = document.getElementById('legend-portrait');
+        if (lgp) lgp.style.display = 'none';
+        const dlcp = document.getElementById('dl-path-checks-portrait');
+        if (dlcp) dlcp.style.display = 'none';
+        const dbp = document.getElementById('download-btn-portrait');
+        if (dbp) dbp.style.display = 'none';
+
+        // Landscape: hide legend, checkboxes, download
+        vbReset();
+        const legend = document.getElementById('legend');
+        if (legend) legend.style.display = 'none';
+        const dlChecks = document.getElementById('dl-path-checks');
+        if (dlChecks) dlChecks.style.display = 'none';
+        const dlBtn = document.getElementById('download-btn');
+        if (dlBtn) dlBtn.style.display = 'none';
+
+        setStatus('', '');
+        document.getElementById('trace-btn').disabled = true;
+        document.getElementById('remove-curve-loops-btn').disabled = true;
+        document.getElementById('merge-panel').classList.remove('visible');
+        document.getElementById('merge-slider').value = 0;
+        document.getElementById('merge-slider-val').textContent = '0.00mm';
+        document.getElementById('svg-file').value     = '';
+      }
+
+      // 19c-iii — Return from result view back to raw import view (slider moved after trace)
+      function resetToImportView() {
+        // Landscape: restore raw SVG
+        if (gLoadedSVGDoc) {
+          const svgEl = gLoadedSVGDoc.querySelector('svg');
+          if (svgEl) {
+            const pathCount = gLoadedSVGDoc.querySelectorAll('path,polyline,polygon,line,rect,circle,ellipse').length;
+            vbShowRawSVG(svgEl.cloneNode(true), gLoadedViewBox, pathCount);
+          }
+        }
+
+        // Portrait: restore raw SVG preview
+        const pInner = document.getElementById('svg-preview-portrait');
+        const pInnerDiv = document.getElementById('svg-preview-inner-portrait');
+        if (pInner && pInnerDiv && gLoadedSVGDoc) {
+          const svgEl = gLoadedSVGDoc.querySelector('svg');
+          if (svgEl) {
+            const pClone = svgEl.cloneNode(true);
+            pClone.removeAttribute('width');
+            pClone.removeAttribute('height');
+            pClone.setAttribute('width','100%');
+            pClone.setAttribute('height','100%');
+            pClone.style.maxHeight = '188px';
+            pInnerDiv.innerHTML = '';
+            pInnerDiv.appendChild(pClone);
+            pInner.classList.add('visible');
+          }
+        }
+
+        // Hide result panel portrait
+        const rp = document.getElementById('result-preview-portrait');
+        if (rp) rp.classList.remove('visible');
+
+        // Re-enable trace button, update status
+        document.getElementById('trace-btn').disabled = false;
+        setStatus('Threshold changed — re-trace to apply', '');
+
+        // Clear stored results so stale data isn't used
+        resetOffsetArrays();
+        gOutputSVGText = '';
+      }
+    function wireBeamInputs() {
+      ['bw','bh','bd'].forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+          drawBeam();
+          document.getElementById('kerf-table-wrap').classList.remove('visible');
+          document.getElementById('offset-label').style.display = 'none';
+        });
+      });
+    }
+
+    // 19e — Action buttons
+    function wireActionButtons() {
+      document.getElementById('compute-btn').addEventListener('click',       computeKerfOffset);
+      document.getElementById('trace-btn').addEventListener('click',         traceKerfOffset);
+      document.getElementById('merge-slider').addEventListener('input', () => {
+        const v = parseFloat(document.getElementById('merge-slider').value);
+        document.getElementById('merge-slider-val').textContent = v.toFixed(2) + 'mm';
+
+        // If a trace result is currently showing, reset back to the raw import
+        // view so the user re-traces with the new threshold.
+        if (gVb.mode === 'result') {
+          resetToImportView();
+        }
+
+        scanAndShowMergeWarnings();
+        overlayMergeDotsOnPreview();
+      });
+
+      function stepMergeSlider(delta) {
+        const slider = document.getElementById('merge-slider');
+        const v = Math.min(0.5, Math.max(0, parseFloat(slider.value) + delta));
+        slider.value = v.toFixed(3);
+        document.getElementById('merge-slider-val').textContent = v.toFixed(2) + 'mm';
+        if (gVb.mode === 'result') resetToImportView();
+        scanAndShowMergeWarnings();
+        overlayMergeDotsOnPreview();
+      }
+      document.getElementById('merge-minus').addEventListener('click', () => stepMergeSlider(-0.01));
+      document.getElementById('merge-plus').addEventListener('click',  () => stepMergeSlider( 0.01));
+      document.getElementById('remove-curve-loops-btn').addEventListener('click', removeCurveLoops);
+      document.getElementById('remove-loops-btn').addEventListener('click',  removeInnerCornerLoops);
+      document.getElementById('sharp-corners-btn').addEventListener('click', applySharpCorners);
+      document.getElementById('blunt-corners-btn').addEventListener('click', applyBluntCorners);
+      document.getElementById('download-btn').addEventListener('click', downloadSVG);
+    }
+
+
+
+
+/* ═══════════════════════════════════════════════════════
+   TASK 20 — CATMULL-ROM DEBUG VISUALISER
+   Shows each cmrom run: points, phantoms, control points,
+   and the resulting bezier curve.
+════════════════════════════════════════════════════════ */
+
+  let gCmromRuns = [];   // [{label, run, phantomP0, phantomP3, nodeIdxOpen, nodeIdxClose}]
+  let gCmromRunIdx = 0;
+
+  // 20a — Extract all cmrom runs from inner+outer arrays
+  function extractCmromRuns(arrays, label) {
+    const runs = [];
+    arrays.forEach((arr, pi) => {
+      const n = arr.length;
+      let i = 0;
+      while (i < n) {
+        if (arr[i].type === "cmrom") {
+          const startIdx = (i - 1 + n) % n;  // pts index of open node
+          const anchor0 = arr[startIdx];
+          const run = [anchor0];
+          while (i < n && arr[i].type === "cmrom") { run.push(arr[i]); i++; }
+          run.push(arr[i % n]);
+          const last = run.length - 1;
+          const endIdx = (i - 1 + n) % n;   // pts index of close node
+
+          // Same logic as ptsToPath: use actual neighbouring cmrom as phantom
+          const prevPt = arr[(startIdx - 1 + n) % n];
+          const nextPt = arr[(endIdx   + 1    ) % n];
+          const phantomP0_reflect = prevPt.type === 'cmrom' ? prevPt : { x: 2*run[0].x - run[1].x, y: 2*run[0].y - run[1].y };
+          const phantomP3_reflect = nextPt.type === 'cmrom' ? nextPt : { x: 2*run[last].x - run[last-1].x, y: 2*run[last].y - run[last-1].y };
+
+          const nodeOpen  = gStoredNodesArrays[pi] ? gStoredNodesArrays[pi][run[0].nodeIdx] : null;
+          const nodeClose = gStoredNodesArrays[pi] ? gStoredNodesArrays[pi][run[last].nodeIdx] : null;
+          let phantomP0_angle = null, phantomP3_angle = null;
+          if (nodeOpen) {
+            const cl = Math.hypot(run[1].x-run[0].x, run[1].y-run[0].y);
+            phantomP0_angle = { x: run[0].x - Math.cos(nodeOpen.angleOut)*cl, y: run[0].y - Math.sin(nodeOpen.angleOut)*cl };
+          }
+          if (nodeClose) {
+            const cl = Math.hypot(run[last].x-run[last-1].x, run[last].y-run[last-1].y);
+            phantomP3_angle = { x: run[last].x + Math.cos(nodeClose.angleIn)*cl, y: run[last].y + Math.sin(nodeClose.angleIn)*cl };
+          }
+          runs.push({ label: label+" path"+pi, run, phantomP0_reflect, phantomP3_reflect, phantomP0_angle, phantomP3_angle, nodeOpen, nodeClose, pathIdx: pi });
+        } else {
+          i++;
+        }
+      }
+    });
+    return runs;
+  }
+
+  // 20b — Init: collect runs, wire controls
+  function initCmromDebug() {
+    const btn = document.getElementById("cmrom-debug-btn");
+    btn.onclick = () => {
+      const panel = document.getElementById("cmrom-debug-panel");
+      const lbl   = document.getElementById("cmrom-debug-label");
+      const vis   = panel.style.display === "none";
+      panel.style.display = vis ? "block" : "none";
+      lbl.style.display   = vis ? "flex"  : "none";
+      btn.textContent     = vis ? "hide cmrom debug" : "show cmrom debug";
+      if (vis) refreshCmromDebug();
+    };
+    document.getElementById("cmr-prev").onclick  = () => { gCmromRunIdx = Math.max(0, gCmromRunIdx-1); refreshCmromDebug(); };
+    document.getElementById("cmr-next").onclick  = () => { gCmromRunIdx = Math.min(gCmromRuns.length-1, gCmromRunIdx+1); refreshCmromDebug(); };
+    ["cmr-show-phantom","cmr-show-cp","cmr-show-pts","cmr-show-curve"].forEach(id => {
+      document.getElementById(id).onchange = refreshCmromDebug;
+    });
+    rebuildCmromRuns();
+  }
+
+  // 20d — For every node point in the offset arrays, compute:
+  //   - spline tangent direction (from prev/next neighbours in pts)
+  //   - correct offset-normal direction (from gStoredNodesArrays)
+  //   - angular error between the two
+  function buildNodeTangentTable() {
+    const rows = [];
+    const arrays = [
+      { label:'inner', arr: gStoredInnerArrays },
+      { label:'outer', arr: gStoredOuterArrays }
+    ];
+    arrays.forEach(({label, arr}) => {
+      arr.forEach((pts, pi) => {
+        const n = pts.length;
+        const nodes = gStoredNodesArrays[pi] || [];
+        pts.forEach((p, i) => {
+          if (p.type !== 'node') return;
+          const prev = pts[(i - 1 + n) % n];
+          const next = pts[(i + 1    ) % n];
+          // Catmull-Rom tangent at p = direction from prev to next
+          const splineTangent = Math.atan2(next.y - prev.y, next.x - prev.x) * 180 / Math.PI;
+          // Correct tangent = travelAngle of original node ± 90° (perpendicular to path)
+          const origNode = nodes[p.nodeIdx];
+          let correctTangent = null, errDeg = null;
+          if (origNode) {
+            const travel = (origNode.angleIn + origNode.angleOut) / 2 * 180 / Math.PI;
+            // offset normal is travel ± 90; spline should be parallel to path (same as travel)
+            correctTangent = travel;
+            let err = splineTangent - travel;
+            while (err >  180) err -= 360;
+            while (err < -180) err += 360;
+            errDeg = err;
+          }
+          rows.push({ label, pi, i, nodeIdx: p.nodeIdx,
+            spline: splineTangent.toFixed(1),
+            correct: correctTangent !== null ? correctTangent.toFixed(1) : '?',
+            err: errDeg !== null ? errDeg.toFixed(1) : '?' });
+        });
+      });
+    });
+    return rows;
+  }
+
+  function refreshNodeTable() {
+    const rows = buildNodeTangentTable();
+    const el = document.getElementById('cmr-node-table');
+    if (!el) return;
+    if (!rows.length) { el.textContent = 'no node points found'; return; }
+    let txt = 'side  path  pt    nodeIdx  spline°   correct°  err°\n';
+    txt     += '────  ────  ────  ───────  ────────  ────────  ────\n';
+    rows.forEach(r => {
+      const errNum = parseFloat(r.err);
+      const flag = Math.abs(errNum) > 5 ? ' ◀' : '';
+      txt += `${r.label.padEnd(5)} ${String(r.pi).padEnd(5)} ${String(r.i).padEnd(5)} ${String(r.nodeIdx).padEnd(8)} ${r.spline.padStart(7)}°  ${r.correct.padStart(7)}°  ${r.err.padStart(4)}°${flag}\n`;
+    });
+    el.textContent = txt;
+  }
+
+  function rebuildCmromRuns() {
+    gCmromRuns = [
+      ...extractCmromRuns(gStoredInnerArrays, "inner"),
+      ...extractCmromRuns(gStoredOuterArrays, "outer")
+    ];
+    gCmromRunIdx = 0;
+  }
+
+  // 20c — Render the current run into the debug SVG
+  function refreshCmromDebug() {
+    rebuildCmromRuns();
+    const total = gCmromRuns.length;
+    document.getElementById("cmr-run-label").textContent = total ? `run ${gCmromRunIdx+1}/${total}` : "no runs";
+    if (!total) return;
+    const entry = gCmromRuns[gCmromRunIdx];
+    drawCmromRun(entry);
+    refreshNodeTable();
+  }
+
+  function drawCmromRun(entry) {
+    const svg   = document.getElementById("cmrom-svg");
+    const W = 340, H = 280, PAD = 32;
+    const showPhantom = document.getElementById("cmr-show-phantom").checked;
+    const showCP      = document.getElementById("cmr-show-cp").checked;
+    const showPts     = document.getElementById("cmr-show-pts").checked;
+    const showCurve   = document.getElementById("cmr-show-curve").checked;
+
+    const { run, phantomP0_reflect, phantomP3_reflect, phantomP0_angle, phantomP3_angle, nodeOpen, nodeClose } = entry;
+    const last = run.length - 1;
+
+    // Collect all relevant points for bounding box
+    const allPts = [...run, phantomP0_reflect, phantomP3_reflect];
+    if (phantomP0_angle) allPts.push(phantomP0_angle);
+    if (phantomP3_angle) allPts.push(phantomP3_angle);
+
+    const xs = allPts.map(p=>p.x), ys = allPts.map(p=>p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const scaleX = (W - PAD*2) / (maxX - minX || 1);
+    const scaleY = (H - PAD*2) / (maxY - minY || 1);
+    const sc = Math.min(scaleX, scaleY);
+    const ox = PAD + ((W - PAD*2) - (maxX-minX)*sc) / 2;
+    const oy = PAD + ((H - PAD*2) - (maxY-minY)*sc) / 2;
+
+    const tx = x => ox + (x - minX) * sc;
+    const ty = y => oy + (y - minY) * sc;
+    const pt = p => tx(p.x)+","+ty(p.y);
+
+    function clampHandle(cp, anchor, spanLen) {
+      const dx = cp.x - anchor.x, dy = cp.y - anchor.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const max = spanLen / 3;
+      if (len <= max || len === 0) return cp;
+      const s = max / len;
+      return { x: anchor.x + dx * s, y: anchor.y + dy * s };
+    }
+
+    // Build bezier curve string using reflect phantoms (current behaviour)
+    function buildCurve(ph0, ph3) {
+      let d = "";
+      for (let r = 0; r < run.length - 1; r++) {
+        const p0 = r > 0           ? run[r-1] : ph0;
+        const p1 = run[r];
+        const p2 = run[r+1];
+        const p3 = r+2 < run.length ? run[r+2] : ph3;
+        const spanLen = Math.sqrt((p2.x-p1.x)**2 + (p2.y-p1.y)**2);
+        const raw1 = { x: p1.x + (p2.x-p0.x)/6, y: p1.y + (p2.y-p0.y)/6 };
+        const raw2 = { x: p2.x - (p3.x-p1.x)/6, y: p2.y - (p3.y-p1.y)/6 };
+        const { x: cp1x, y: cp1y } = clampHandle(raw1, p1, spanLen);
+        const { x: cp2x, y: cp2y } = clampHandle(raw2, p2, spanLen);
+        if (r === 0) d += `M${tx(p1.x)},${ty(p1.y)} `;
+        d += `C${tx(cp1x)},${ty(cp1y)} ${tx(cp2x)},${ty(cp2y)} ${tx(p2.x)},${ty(p2.y)} `;
+      }
+      return d;
+    }
+
+    // Build control point markers
+    function cpMarkers(ph0, ph3, color) {
+      let marks = "";
+      for (let r = 0; r < run.length - 1; r++) {
+        const p0 = r > 0           ? run[r-1] : ph0;
+        const p1 = run[r];
+        const p2 = run[r+1];
+        const p3 = r+2 < run.length ? run[r+2] : ph3;
+        const spanLen = Math.sqrt((p2.x-p1.x)**2 + (p2.y-p1.y)**2);
+        const raw1 = { x: p1.x + (p2.x-p0.x)/6, y: p1.y + (p2.y-p0.y)/6 };
+        const raw2 = { x: p2.x - (p3.x-p1.x)/6, y: p2.y - (p3.y-p1.y)/6 };
+        const { x: cp1x, y: cp1y } = clampHandle(raw1, p1, spanLen);
+        const { x: cp2x, y: cp2y } = clampHandle(raw2, p2, spanLen);
+        marks += `<line x1="${tx(p1.x)}" y1="${ty(p1.y)}" x2="${tx(cp1x)}" y2="${ty(cp1y)}" stroke="${color}" stroke-width="0.75" stroke-dasharray="2 2"/>`;
+        marks += `<circle cx="${tx(cp1x)}" cy="${ty(cp1y)}" r="2.5" fill="${color}"/>`;
+        marks += `<line x1="${tx(p2.x)}" y1="${ty(p2.y)}" x2="${tx(cp2x)}" y2="${ty(cp2y)}" stroke="${color}" stroke-width="0.75" stroke-dasharray="2 2"/>`;
+        marks += `<circle cx="${tx(cp2x)}" cy="${ty(cp2y)}" r="2.5" fill="${color}"/>`;
+      }
+      return marks;
+    }
+
+    let html = "";
+
+    // Curves
+    if (showCurve) {
+      const dReflect = buildCurve(phantomP0_reflect, phantomP3_reflect);
+      html += `<path d="${dReflect}" fill="none" stroke="#33cc55" stroke-width="1.5"/>`;
+      if (phantomP0_angle && phantomP3_angle) {
+        const dAngle = buildCurve(phantomP0_angle, phantomP3_angle);
+        html += `<path d="${dAngle}" fill="none" stroke="#ff6600" stroke-width="1" stroke-dasharray="4 2" opacity="0.7"/>`;
+      }
+    }
+
+    // Control points
+    if (showCP) {
+      html += cpMarkers(phantomP0_reflect, phantomP3_reflect, "#33cc55");
+      if (phantomP0_angle && phantomP3_angle) {
+        html += cpMarkers(phantomP0_angle, phantomP3_angle, "#ff6600");
+      }
+    }
+
+    // Phantoms
+    if (showPhantom) {
+      // reflect phantoms (green)
+      html += `<line x1="${pt(phantomP0_reflect)}" x2="${pt(run[0])}" stroke="#33cc55" stroke-width="0.75" stroke-dasharray="3 2"/>`;
+      html += `<circle cx="${tx(phantomP0_reflect.x)}" cy="${ty(phantomP0_reflect.y)}" r="3.5" fill="none" stroke="#33cc55" stroke-width="1"/>`;
+      html += `<line x1="${pt(run[last])}" x2="${pt(phantomP3_reflect)}" stroke="#33cc55" stroke-width="0.75" stroke-dasharray="3 2"/>`;
+      html += `<circle cx="${tx(phantomP3_reflect.x)}" cy="${ty(phantomP3_reflect.y)}" r="3.5" fill="none" stroke="#33cc55" stroke-width="1"/>`;
+      // angle phantoms (orange)
+      if (phantomP0_angle) {
+        html += `<line x1="${pt(phantomP0_angle)}" x2="${pt(run[0])}" stroke="#ff6600" stroke-width="0.75" stroke-dasharray="3 2"/>`;
+        html += `<circle cx="${tx(phantomP0_angle.x)}" cy="${ty(phantomP0_angle.y)}" r="3.5" fill="none" stroke="#ff6600" stroke-width="1"/>`;
+      }
+      if (phantomP3_angle) {
+        html += `<line x1="${pt(run[last])}" x2="${pt(phantomP3_angle)}" stroke="#ff6600" stroke-width="0.75" stroke-dasharray="3 2"/>`;
+        html += `<circle cx="${tx(phantomP3_angle.x)}" cy="${ty(phantomP3_angle.y)}" r="3.5" fill="none" stroke="#ff6600" stroke-width="1"/>`;
+      }
+    }
+
+    // Run points
+    if (showPts) {
+      run.forEach((p, i) => {
+        const isNode = i === 0 || i === last;
+        const col    = isNode ? "#fff" : "#ffd400";
+        html += `<circle cx="${tx(p.x)}" cy="${ty(p.y)}" r="${isNode?4:3}" fill="${col}"/>`;
+        html += `<text x="${tx(p.x)+5}" y="${ty(p.y)-4}" font-size="8" font-family="DM Mono,monospace" fill="${col}">${i}</text>`;
+      });
+    }
+
+    // Legend
+    html += `<text x="6" y="14" font-size="9" font-family="DM Mono,monospace" fill="#33cc55">● reflect (active)</text>`;
+    if (phantomP0_angle) html += `<text x="6" y="26" font-size="9" font-family="DM Mono,monospace" fill="#ff6600">● angle (old)</text>`;
+
+    svg.innerHTML = html;
+
+    // Info text
+    const info = document.getElementById("cmr-info");
+    const fmtP = p => `(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`;
+    let txt = `${entry.label}  nodeIdx open=${run[0].nodeIdx} close=${run[last].nodeIdx}  pts in run: ${run.length}
+`;
+    txt += `node[open]  : ${run[0].type} ${fmtP(run[0])}`;
+    if (nodeOpen) txt += `  angleOut=${(nodeOpen.angleOut*180/Math.PI).toFixed(1)}°`;
+    txt += `
+phantom0 reflect: ${fmtP(phantomP0_reflect)}`;
+    if (phantomP0_angle) txt += `   angle: ${fmtP(phantomP0_angle)}`;
+    txt += `
+node[close] : ${run[last].type} ${fmtP(run[last])}`;
+    if (nodeClose) txt += `  angleIn=${(nodeClose.angleIn*180/Math.PI).toFixed(1)}°`;
+    txt += `
+phantom3 reflect: ${fmtP(phantomP3_reflect)}`;
+    if (phantomP3_angle) txt += `   angle: ${fmtP(phantomP3_angle)}`;
+    info.textContent = txt;
+  }
+
+
+/* ═══════════════════════════════════════════════════════
+   VIEWBOX — ZOOM & PAN ENGINE
+   Manages the landscape right-panel viewbox.
+   State: gVb holds current transform (tx, ty, scale).
+   All zoom is centred on the cursor / pinch midpoint.
+════════════════════════════════════════════════════════ */
+
+const gVb = {
+  tx: 0, ty: 0, scale: 1,
+  hasSVG: false,
+  svgW: 0, svgH: 0,   // natural SVG dimensions (from viewBox)
+  mode: 'empty',       // 'empty' | 'raw' | 'result'
+};
+
+const VB_MIN_SCALE = 0.05;
+const VB_MAX_SCALE = 1000; // 100000%
+
+// ── Public API ────────────────────────────────────────────────────────────
+
+// Show raw SVG (after drop, during merge)
+function vbShowRawSVG(svgEl, viewBox, pathCount) {
+  const stage = document.getElementById('vb-stage');
+  if (!stage) return;
+  const savedTx = gVb.tx, savedTy = gVb.ty, savedScale = gVb.scale;
+  const hadSVG = gVb.hasSVG;
+  _vbSetSVG(svgEl, viewBox, hadSVG);
+  if (hadSVG) { gVb.tx = savedTx; gVb.ty = savedTy; gVb.scale = savedScale; _vbApply(); }
+  gVb.mode = 'raw';
+  _vbShowMeta(true);
+  _vbUpdateMetaRaw(viewBox, pathCount);
+  _vbHideResultMeta();
+  document.getElementById('vb-empty').classList.add('hidden');
+}
+
+// Overlay merge dots on the landscape stage SVG
+function vbOverlayMergeDots() {
+  const stage = document.getElementById('vb-stage');
+  if (!stage || !gVb.hasSVG) return;
+  const stageSVG = stage.querySelector('svg');
+  if (!stageSVG) return;
+
+  const old = stageSVG.querySelector('#merge-overlay-ls');
+  if (old) old.remove();
+
+  const thresh = parseFloat(document.getElementById('merge-slider').value) || 0;
+  if (!gLoadedSVGDoc) return;
+
+  const vbParts = (gLoadedViewBox || '0 0 100 100').split(/[\s,]+/).map(Number);
+  const svgW = vbParts[2] || 100, svgH = vbParts[3] || 100;
+  const dotR = Math.max(svgW, svgH) * NODE_DOT_RADIUS_FRACTION;
+
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('id', 'merge-overlay-ls');
+
+  const pathEls = gLoadedSVGDoc.querySelectorAll('path');
+  pathEls.forEach(pathEl => {
+    const segs  = parsePathSegments(pathEl.getAttribute('d') || '');
+    if (!segs.length) return;
+    const nodes = classifyNodes(segs);
+    const pairs = scanNodeProximity(nodes, Math.max(thresh, 0.001));
+
+    const willMerge = new Set();
+    pairs.forEach(p => { if (p.dist < thresh) { willMerge.add(p.i); willMerge.add(p.j); } });
+
+    nodes.forEach((node, i) => {
+      const inPair = pairs.some(p => p.i === i || p.j === i);
+      if (!inPair) return;
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', node.x);
+      circle.setAttribute('cy', node.y);
+      circle.setAttribute('r', dotR);
+      circle.setAttribute('fill', willMerge.has(i) ? NODE_DOT_COLOR_MERGE_ACTIVE : NODE_DOT_COLOR_MERGE_NEARBY);
+      circle.setAttribute('opacity', '0.85');
+      g.appendChild(circle);
+    });
+  });
+
+    stageSVG.appendChild(g);
+  _vbUpdateStrokeWidths();
+}
+
+// Show result SVG (after trace / loops / corners)
+function vbShowResultSVG(svgString) {
+  const stage = document.getElementById('vb-stage');
+  if (!stage) return;
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgString, 'image/svg+xml');
+  const svgEl = doc.querySelector('svg');
+  if (!svgEl) return;
+
+  // Keep same viewBox / transform if same dimensions
+  const newVB = svgEl.getAttribute('viewBox');
+  const sameVB = newVB === gVb._lastViewBox;
+
+  // Always preserve zoom/pan when switching from raw to result
+  const savedTx = gVb.tx, savedTy = gVb.ty, savedScale = gVb.scale;
+  const hadSVG = gVb.hasSVG;
+
+  _vbSetSVG(svgEl, newVB, sameVB || hadSVG);
+
+  if (hadSVG) {
+    gVb.tx = savedTx; gVb.ty = savedTy; gVb.scale = savedScale;
+    _vbApply();
+  }
+  gVb.mode = 'result';
+  _vbShowMeta(true);
+  document.getElementById('vb-empty').classList.add('hidden');
+}
+
+// Update result meta labels
+function vbSetResultMeta(pathCount, samples) {
+  const rm = document.getElementById('vb-meta-result');
+  const rp = document.getElementById('vb-meta-rpaths');
+  if (rm) { rm.style.display = ''; const s = rm.querySelector('span'); if (s) s.textContent = samples; }
+  if (rp) { rp.style.display = ''; const s = rp.querySelector('span'); if (s) s.textContent = pathCount; }
+}
+
+// Reset viewbox to empty state
+function vbReset() {
+  const stage = document.getElementById('vb-stage');
+  if (stage) stage.innerHTML = '';
+  gVb.hasSVG = false;
+  gVb.mode = 'empty';
+  document.getElementById('vb-empty').classList.remove('hidden');
+  _vbShowMeta(false);
+  _vbUpdateZoomLabel();
+}
+
+// Fit current SVG to view
+function vbFit() {
+  const shell = document.getElementById('vb-shell');
+  if (!shell || !gVb.hasSVG) return;
+  const cw = shell.clientWidth, ch = shell.clientHeight - _vbMetaHeight();
+  if (!cw || !ch || !gVb.svgW || !gVb.svgH) return;
+  const pad = 24;
+  const scaleX = (cw - pad*2) / gVb.svgW;
+  const scaleY = (ch - pad*2) / gVb.svgH;
+  gVb.scale = Math.min(scaleX, scaleY);
+  gVb.tx = (cw - gVb.svgW * gVb.scale) / 2;
+  gVb.ty = (ch - gVb.svgH * gVb.scale) / 2;
+  _vbApply();
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────────
+
+function _vbMetaHeight() {
+  const m = document.getElementById('vb-meta');
+  return (m && m.style.display !== 'none') ? m.offsetHeight : 0;
+}
+
+function _vbSetSVG(svgEl, viewBox, keepTransform) {
+  const stage = document.getElementById('vb-stage');
+  if (!stage) return;
+
+  // Parse natural size from viewBox
+  const vbParts = (viewBox || '0 0 100 100').split(/[\s,]+/).map(Number);
+  gVb.svgW = vbParts[2] || 100;
+  gVb.svgH = vbParts[3] || 100;
+  gVb._lastViewBox = viewBox;
+
+  // Normalise all path strokes to explicit attributes so _vbUpdateStrokeWidths
+  // can manage them uniformly, regardless of how the source SVG styled them.
+  svgEl.querySelectorAll('path').forEach(p => {
+    const styleStroke = p.style.stroke;
+    if (styleStroke) { p.setAttribute('stroke', styleStroke); p.style.stroke = ''; }
+    if (!p.getAttribute('stroke')) p.setAttribute('stroke', '#888');
+    p.style.strokeWidth = '';
+    p.setAttribute('stroke-width', '1');  // placeholder; _vbApply will correct it
+  });
+
+  // Size SVG to its natural viewBox dimensions; transform does the scaling
+  svgEl.setAttribute('width',  gVb.svgW);
+  svgEl.setAttribute('height', gVb.svgH);
+  svgEl.style.display = 'block';
+  svgEl.style.overflow = 'visible';
+
+  stage.innerHTML = '';
+  stage.appendChild(svgEl);
+  gVb.hasSVG = true;
+
+  if (!keepTransform) vbFit();
+  else _vbApply();
+}
+
+function _vbApply() {
+  const stage = document.getElementById('vb-stage');
+  if (!stage) return;
+  stage.style.transform = `translate(${gVb.tx}px,${gVb.ty}px) scale(${gVb.scale})`;
+  stage.style.width  = gVb.svgW + 'px';
+  stage.style.height = gVb.svgH + 'px';
+  _vbUpdateZoomLabel();
+  _vbUpdateStrokeWidths();
+}
+
+// Keep path strokes and node dots visually constant as zoom changes.
+// stroke-width is expressed in SVG user units; since CSS scale() enlarges
+// those units proportionally, we divide by gVb.scale so the rendered
+// pixel thickness stays fixed at roughly VB_STROKE_SCREEN_PX pixels.
+const VB_STROKE_SCREEN_PX = 1.0;   // target on-screen thickness in CSS px
+const VB_DOT_SCREEN_PX    = 3.0;   // target on-screen radius for node dots
+function _vbUpdateStrokeWidths() {
+  const stage = document.getElementById('vb-stage');
+  if (!stage || !gVb.hasSVG || gVb.scale <= 0) return;
+  const svgEl = stage.querySelector('svg');
+  if (!svgEl) return;
+
+  // desired width in SVG user units = screen px / scale
+  const sw = VB_STROKE_SCREEN_PX / gVb.scale;
+  svgEl.querySelectorAll('path').forEach(p => {
+    p.setAttribute('stroke-width', sw);
+  });
+
+  // node dots — keep them a fixed screen size too
+  const dr = VB_DOT_SCREEN_PX / gVb.scale;
+  svgEl.querySelectorAll('circle').forEach(c => {
+    c.setAttribute('r', dr);
+  });
+}
+
+function _vbUpdateZoomLabel() {
+  const el = document.getElementById('vb-zoom-label');
+  if (el) el.textContent = Math.round(gVb.scale * 100) + '%';
+}
+
+function _vbShowMeta(show) {
+  const m = document.getElementById('vb-meta');
+  if (m) m.style.display = show ? 'flex' : 'none';
+}
+
+function _vbUpdateMetaRaw(viewBox, pathCount) {
+  const vbEl = document.getElementById('vb-meta-vb');
+  const pcEl = document.getElementById('vb-meta-paths');
+  if (vbEl) { const s = vbEl.querySelector('span'); if (s) s.textContent = viewBox || '—'; }
+  if (pcEl) { const s = pcEl.querySelector('span'); if (s) s.textContent = pathCount; }
+}
+
+function _vbHideResultMeta() {
+  const rm = document.getElementById('vb-meta-result');
+  const rp = document.getElementById('vb-meta-rpaths');
+  if (rm) rm.style.display = 'none';
+  if (rp) rp.style.display = 'none';
+}
+
+// ── Zoom helper: zoom towards a point (cx,cy) in shell coords ─────────────
+function _vbZoomAt(cx, cy, factor) {
+  const newScale = Math.min(VB_MAX_SCALE, Math.max(VB_MIN_SCALE, gVb.scale * factor));
+  const ratio = newScale / gVb.scale;
+  gVb.tx = cx - ratio * (cx - gVb.tx);
+  gVb.ty = cy - ratio * (cy - gVb.ty);
+  gVb.scale = newScale;
+  _vbApply();
+}
+
+// ── Attach all pointer / wheel events to the shell ───────────────────────
+function setupViewboxInteraction() {
+  const shell = document.getElementById('vb-shell');
+  const stage = document.getElementById('vb-stage');
+  const fitBtn = document.getElementById('vb-fit-btn');
+  if (!shell || !stage) return;
+
+  if (fitBtn) fitBtn.addEventListener('click', vbFit);
+
+  // Scroll wheel zoom
+  shell.addEventListener('wheel', e => {
+    if (!gVb.hasSVG) return;
+    e.preventDefault();
+    const rect = shell.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.12 : 1/1.12;
+    _vbZoomAt(cx, cy, factor);
+  }, { passive: false });
+
+  // Mouse pan
+  let drag = null;
+  stage.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    drag = { sx: e.clientX - gVb.tx, sy: e.clientY - gVb.ty };
+    stage.classList.add('grabbing');
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e => {
+    if (!drag) return;
+    gVb.tx = e.clientX - drag.sx;
+    gVb.ty = e.clientY - drag.sy;
+    _vbApply();
+  });
+  window.addEventListener('mouseup', () => {
+    drag = null;
+    stage.classList.remove('grabbing');
+  });
+
+  // Double-click: zoom in 50% centred on click point
+  shell.addEventListener('dblclick', e => {
+    if (e.target.closest('.vb-controls,.vb-meta')) return;
+    if (!gVb.hasSVG) return;
+    const rect = shell.getBoundingClientRect();
+    _vbZoomAt(e.clientX - rect.left, e.clientY - rect.top, 1.5);
+  });
+
+  // Touch: pan + pinch zoom
+  let touches = {};
+  let lastPinchDist = null;
+  let lastPinchMid = null;
+
+  shell.addEventListener('touchstart', e => {
+    e.preventDefault();
+    Array.from(e.changedTouches).forEach(t => { touches[t.identifier] = { x: t.clientX, y: t.clientY }; });
+    const ids = Object.keys(touches);
+    if (ids.length === 2) {
+      const a = touches[ids[0]], b = touches[ids[1]];
+      lastPinchDist = Math.hypot(b.x - a.x, b.y - a.y);
+      lastPinchMid  = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+  }, { passive: false });
+
+  shell.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const rect = shell.getBoundingClientRect();
+    Array.from(e.changedTouches).forEach(t => { touches[t.identifier] = { x: t.clientX, y: t.clientY }; });
+    const ids = Object.keys(touches);
+
+    if (ids.length === 1) {
+      // Single finger pan
+      const t = e.touches[0];
+      const prev = touches[t.identifier];
+      // We need prev position before this move — store it
+      // Re-read from e.touches for delta
+    } else if (ids.length === 2) {
+      const a = touches[ids[0]], b = touches[ids[1]];
+      const dist = Math.hypot(b.x - a.x, b.y - a.y);
+      const mid  = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      if (lastPinchDist) {
+        const factor = dist / lastPinchDist;
+        const cx = mid.x - rect.left;
+        const cy = mid.y - rect.top;
+        // Pan delta from midpoint movement
+        gVb.tx += (mid.x - lastPinchMid.x);
+        gVb.ty += (mid.y - lastPinchMid.y);
+        _vbZoomAt(cx, cy, factor);
+      }
+      lastPinchDist = dist;
+      lastPinchMid  = mid;
+    }
+  }, { passive: false });
+
+  // Proper single-finger pan via pointerdown
+  let pointerDrag = null;
+  shell.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'touch' && e.isPrimary) {
+      pointerDrag = { sx: e.clientX - gVb.tx, sy: e.clientY - gVb.ty };
+    }
+  });
+  shell.addEventListener('pointermove', e => {
+    if (!pointerDrag || !e.isPrimary) return;
+    if (Object.keys(touches).length >= 2) { pointerDrag = null; return; }
+    gVb.tx = e.clientX - pointerDrag.sx;
+    gVb.ty = e.clientY - pointerDrag.sy;
+    _vbApply();
+  });
+  shell.addEventListener('pointerup',     () => { pointerDrag = null; });
+  shell.addEventListener('pointercancel', () => { pointerDrag = null; });
+
+  shell.addEventListener('touchend', e => {
+    Array.from(e.changedTouches).forEach(t => { delete touches[t.identifier]; });
+    const ids = Object.keys(touches);
+    if (ids.length < 2) { lastPinchDist = null; lastPinchMid = null; }
+    // Double-tap: zoom in 50% centred on tap point — only when no fingers remain
+    if (ids.length === 0 && e.changedTouches.length === 1) {
+      const t = e.changedTouches[0];
+      const now = Date.now();
+      if (shell._lastTap && now - shell._lastTap < 300 && !shell._lastTapWasMulti) {
+        if (!gVb.hasSVG) return;
+        const rect = shell.getBoundingClientRect();
+        _vbZoomAt(t.clientX - rect.left, t.clientY - rect.top, 1.5);
+        shell._lastTap = 0; // reset so triple-tap doesnt chain
+      } else {
+        shell._lastTap = now;
+      }
+    } else if (ids.length >= 1) {
+      // multi-finger was involved — flag so next single tap doesnt misfire
+      shell._lastTapWasMulti = true;
+    }
+    if (ids.length === 0) shell._lastTapWasMulti = false;
+  }, { passive: false });
+
+  // Resize: only re-fit on genuine orientation/window change, not browser-chrome jiggle.
+  // Debounce 400ms and only act if size changed significantly (>20px).
+  let _vbLastW = window.innerWidth, _vbLastH = window.innerHeight, _vbResizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(_vbResizeTimer);
+    _vbResizeTimer = setTimeout(() => {
+      const dw = Math.abs(window.innerWidth  - _vbLastW);
+      const dh = Math.abs(window.innerHeight - _vbLastH);
+      if ((dw > 20 || dh > 20) && gVb.hasSVG) vbFit();
+      _vbLastW = window.innerWidth;
+      _vbLastH = window.innerHeight;
+    }, 400);
+  });
+}
+
+/* ── INIT ── */
+// Populate beam preset dropdown and apply first preset
+(function initPresets() {
+  const sel = document.getElementById('beam-preset');
+  BEAM_PRESETS.forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+  function applyPreset(i) {
+    const p = BEAM_PRESETS[i];
+    if (!p) return;
+    document.getElementById('bw').value = p.w;
+    document.getElementById('bh').value = p.h;
+    document.getElementById('bd').value = p.d;
+    drawBeam();
+  }
+  sel.addEventListener('change', () => applyPreset(parseInt(sel.value)));
+  applyPreset(0);
+})();
+drawBeam();
+setupEventListeners();
+setupViewboxInteraction();
+
+</script>
+</body>
+</html>
