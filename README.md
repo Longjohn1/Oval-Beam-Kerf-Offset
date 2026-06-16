@@ -45,7 +45,7 @@ Load your SVG shape, then tap **Trace Kerf Offset**. Use the other buttons to re
 
 Zoom in to see minute detail of the offset paths.
 
-### 5 Download
+### 5. Download
 
 When you are happy with your results, choose which paths to download and download to your device/computer.
 
@@ -58,9 +58,9 @@ Open the HTML file in a text editor. Near the top of the code you will find a se
 
 Edit the name, width, height, and diagonal values to match your machines. Now on next reload you can select your laser beam dimensions from the dropdown. Do not edit anything outside this section unless you know html
 
+## Download
 
-
-Download the latest version: [`Oval Kerf Offset.html`](Oval%20Kerf%20Offset.html)
+Download the latest version: [Oval Kerf Offset.html](https://github.com/Longjohn1/Oval-Beam-Kerf-Offset/releases/download/V1.0/Oval.Kerf.Offset.html)
 
 Open it in any modern browser — no installation required.
 
