@@ -57,8 +57,11 @@ Open the HTML file in a text editor. Near the top of the code you will find a se
 
 
 Edit the name, width, height, and diagonal values to match your machines. 
+
 *** Remember to SAVE before leaving text editor ***.
+
 Now on next reload you can select your laser beam dimensions from the dropdown. 
+
 Do not edit anything outside this section unless you know html
 
 ## Download
