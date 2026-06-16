@@ -6,7 +6,7 @@ A browser-based tool for calculating and tracing accurate kerf offsets for laser
 
 Most laser cutters don't have a perfectly round beam — the beam is slightly oval, with different widths in the horizontal, vertical, and diagonal directions. Standard kerf offset tools assume a round beam and produce inaccurate results.
 
-This tool accounts for the true oval shape of your beam, giving you accurate kerf offsets at every angle around your shape — including sharp points on stars and other complex geometry.
+This tool accounts for the true oval shape of your beam, giving you accurate kerf offsets at every angle around your shape.
 
 ## Features
 
@@ -39,7 +39,7 @@ Enter these three values into the beam dimension boxes at the top of the tool.
 
 ### 3. Load your SVG and trace
 
-Load your SVG shape, then tap **Compute Kerf Table** followed by **Trace Kerf Offset**.
+Load your SVG shape, then tap  **Trace Kerf Offset**.
 
 ### 4. Customise beam presets
 
