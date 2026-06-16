@@ -1,6 +1,6 @@
 # Oval Beam Kerf Offset
 
-A browser-based tool for calculating and tracing accurate kerf offsets for laser cutters with oval or asymmetric beams.
+A browser-based tool for calculating and tracing accurate kerf offset for laser cutters with oval or asymmetric beams.
 
 ## What it does
 
@@ -10,11 +10,11 @@ This tool accounts for the true oval shape of your beam, giving you accurate ker
 
 ## Features
 
-- **Accurate kerf offset tracing** — traces inner and outer kerf offsets for SVG shapes
+- **Accurate kerf offset tracing** — traces inner and outer kerf offset for SVG shapes
 - **Oval beam support** — models your beam's true shape using width, height, and diagonal measurements
 - **Blunt Corners mode** — removes sharp points from inlay shapes so they fit perfectly into pockets
 - **Beam presets** — save your laser machine profiles for quick switching
-
+- **Multiple path support** — processes all closed paths in a single SVG file in one go. A text inlay of 100 letters can be processed in a few seconds
 - **No installation** — runs entirely in your browser, open the HTML file and go
 
 ## How to use
@@ -37,23 +37,30 @@ Subtract each from 20mm to get the beam radius, then multiply by 2 for the full 
 
 Enter these three values into the beam dimension boxes at the top of the tool.
 
-### 3. Load your SVG and trace
+### 3. Load your SVG
 
-Load your SVG shape, then tap  **Trace Kerf Offset**.
+Load your SVG shape, then tap **Trace Kerf Offset**. Use the other buttons to remove small loops caused by corners, and select corner type.
 
-### 4. Customise beam presets
+### 4. Zoom
 
-Open the HTML file in a text editor. At the very top of the code you will find a section clearly marked:
+Zoom in to see minute detail of the offset paths.
 
-```
+### 5 Download
+
+When you are happy with your results, choose which paths to download and download to your device/computer.
+
+### Beam Presets
+
+Open the HTML file in a text editor. Near the top of the code you will find a section clearly marked:
+
 // LASER BEAM PRESETS — EDIT YOUR LASER SIZES HERE
-```
 
-Edit the name, width, height, and diagonal values to match your machines. Do not edit anything outside this section.
 
-## Download
+Edit the name, width, height, and diagonal values to match your machines. Now on next reload you can select your laser beam dimensions from the dropdown. Do not edit anything outside this section unless you know html
 
-Download the latest version: [`75_open_source_licence_added.html`](75_open_source_licence_added.html)
+
+
+Download the latest version: [`Oval Kerf Offset.html`](Oval%20Kerf%20Offset.html)
 
 Open it in any modern browser — no installation required.
 
