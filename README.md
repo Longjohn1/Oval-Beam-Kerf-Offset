@@ -2,6 +2,8 @@
 
 A browser-based tool for calculating and tracing accurate kerf offset for laser cutters with oval or asymmetric beams.
 
+This tool is designed to be used in landscape mode. If it is used in portrait on some phones, or the window is set to a very narrow setting on PC, it will jump into debug mode.
+
 ## What it does
 
 Most laser cutters don't have a perfectly round beam — the beam is slightly oval, with different widths in the horizontal, vertical, and diagonal directions. Standard kerf offset tools assume a round beam and produce inaccurate results.
