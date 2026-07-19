@@ -99,6 +99,7 @@ const BEAM_PRESETS = [
   .merge-slider-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
   .merge-slider-row input[type=range]{flex:1;accent-color:#ffd400}
   .merge-slider-val{font-family:'DM Mono',monospace;font-size:12px;color:#ffd400;min-width:42px;text-align:right}
+  #snug-slider{transform:scaleX(-1)}
   .merge-step-btn{background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:4px;color:var(--color-text-primary);font-size:14px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;padding:0;line-height:1}
   .merge-step-btn:hover{border-color:var(--color-border-primary);background:var(--color-background-secondary)}
   .merge-count{font-family:'DM Mono',monospace;font-size:11px;color:#aaa;margin-top:4px}
@@ -544,7 +545,22 @@ document.addEventListener('DOMContentLoaded', function(){
 
       <!-- 6–8. Action buttons -->
       <button class="btn" id="trace-btn" disabled>trace kerf offset</button>
-      <button class="btn" id="remove-loops-btn" disabled>remove inner corner loops</button>
+
+      <!-- 6b. Snugness slider (shown only after a trace has been run) -->
+      <div class="merge-panel" id="snug-panel">
+        <div class="field-label" style="margin-bottom:10px">snugness (fit adjustment)</div>
+        <div class="merge-slider-row">
+          <button class="merge-step-btn" id="snug-plus" tabindex="-1">+</button>
+          <input type="range" id="snug-slider" min="-0.05" max="0.01" step="0.005" value="0">
+          <button class="merge-step-btn" id="snug-minus" tabindex="-1">−</button>
+          <span class="merge-slider-val" id="snug-slider-val">0.000mm</span>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn" id="remove-loops-btn" disabled style="margin-top:0">remove inner corner loops</button>
+        <button class="btn" id="dogbone-corners-btn" disabled style="margin-top:0">dogbone corners</button>
+      </div>
       <button class="btn" id="remove-curve-loops-btn" disabled>remove curve loops</button>
       <div class="btn-row">
         <button class="btn" id="sharp-corners-btn" disabled style="margin-top:0">sharp corners</button>
@@ -677,6 +693,10 @@ document.addEventListener('DOMContentLoaded', function(){
 
 let beamW, beamH, beamD;
 let kx, ky, kd;
+// Fraction of kd (measured diagonal beam radius) used to place the dbc node
+// beyond internodebefore, toward the true original corner. Kept separate from
+// kd's live value so it is easy to later derive from beam size if desired.
+const DOGBONE_REACH_FRACTION = 1 / 3;
 const MM_PER_USER_UNIT = 0.2646; // 1 SVG user unit = 0.2646 mm (96dpi: 25.4/96)
 let superellipseN;
 
@@ -690,6 +710,7 @@ let storedViewBox     = null;
 let storedSW          = 0;
 let storedNodesArrays = [];
 let storedTable       = null;
+let snugAdjust        = 0; // mm, total diameter adjustment from snugness slider; +tightens, -loosens
 let storedInnerArrays = [];
 let storedOuterArrays = [];
 
@@ -1584,13 +1605,28 @@ const NODE_DOT_COLOR_MERGE_NEARBY = '#ffffff';
 
 
   // 9a — Offset a single node left and right using the tangent table
+  //      Snugness: snugAdjust (mm, total) nudges each side's offset radius by
+  //      snugAdjust/2, converted to user units. Beam/kerf table values are untouched.
   function offsetPoint(nx, ny, travelAngle, table) {
     const left  = tangentTableLookup(table, travelAngle);
     const right = tangentTableLookup(table, travelAngle + Math.PI);
+
+    const snugUnits = (snugAdjust / 2) / MM_PER_USER_UNIT;
+    const leftAdj    = applySnugness(left,  snugUnits);
+    const rightAdj   = applySnugness(right, snugUnits);
+
     return {
-      left:  { x: nx + left.x,  y: ny + left.y  },
-      right: { x: nx + right.x, y: ny + right.y }
+      left:  { x: nx + leftAdj.x,  y: ny + leftAdj.y  },
+      right: { x: nx + rightAdj.x, y: ny + rightAdj.y }
     };
+  }
+
+  // 9a-i — Scale an offset vector's radius by a fixed mm amount, preserving direction
+  function applySnugness(vec, deltaUnits) {
+    const r = Math.hypot(vec.x, vec.y);
+    if (r < 1e-9 || deltaUnits === 0) return vec;
+    const scale = (r + deltaUnits) / r;
+    return { x: vec.x * scale, y: vec.y * scale };
   }
 
   // 9b — Line intersection: two lines each defined by a point and angle
@@ -2645,7 +2681,8 @@ const NODE_DOT_COLOR_MERGE_NEARBY = '#ffffff';
       const dropIndices = new Set(dropA ? arcA : arcB);
       const dropArr = dropA ? arcA : arcB;
       const isProtected = t => t === 'node' || t === 'internodebefore'
-                            || t === 'internodeafter' || t === 'arcnode';
+                            || t === 'internodeafter' || t === 'arcnode'
+                            || t === 'dbc' || t === 'internodebefore2';
       if (dropArr.some(k => isProtected(arr[k].type))) {
         dbg(`[excise] aborted — drop arc contains protected node type`);
         return { aborted: true };
@@ -2771,6 +2808,89 @@ const NODE_DOT_COLOR_MERGE_NEARBY = '#ffffff';
         }
       }
       return arr.filter((_, i) => !drop.has(i));
+    }
+
+  // 12b — Master function: same loop removal as removeInnerCornerLoops, plus
+  //       dogbone node insertion (dbc + internodebefore2) at qualifying corners.
+  function applyDogboneCorners() {
+    cleanedInnerArrays = storedInnerArrays.map(removeLoopsFromArray);
+    cleanedOuterArrays = storedOuterArrays.map(removeLoopsFromArray);
+
+    cleanedOuterArrays = cleanedOuterArrays.map((arr, pi) =>
+      insertDogboneNodes(arr, storedNodesArrays[pi], /*isGreen=*/true));
+    cleanedInnerArrays = cleanedInnerArrays.map((arr, pi) =>
+      insertDogboneNodes(arr, storedNodesArrays[pi], /*isGreen=*/false));
+
+    renderCleanedResult(cleanedOuterArrays, cleanedInnerArrays);
+    document.getElementById('remove-curve-loops-btn').disabled = false;
+    dumpCleanedArrays();
+    flushDebug();
+
+    const count = cleanedInnerArrays.length;
+    setStatus(`dogbone corners applied — ${count} path${count !== 1 ? 's' : ''}`, 'ok');
+    document.getElementById('sharp-corners-btn').disabled = false;
+    document.getElementById('blunt-corners-btn').disabled = false;
+  }
+
+    // 12b-i — Interior turn angle (degrees) at a node, from its stored angleIn/angleOut
+    function nodeTurnAngleDeg(node) {
+      return Math.abs(angleDiff(node.angleIn, node.angleOut)) * 180 / Math.PI;
+    }
+
+    // 12b-ii — Build the dbc + internodebefore2 pair for one qualifying internodebefore point
+    function buildDogboneInsert(pt, node) {
+      const dx = node.x - pt.x, dy = node.y - pt.y;
+      const dist = Math.hypot(dx, dy);
+      const ux = dist > 1e-9 ? dx / dist : 0;
+      const uy = dist > 1e-9 ? dy / dist : 0;
+      // Fixed shift derived from kd (measured diagonal beam radius), NOT from
+      // the live internodebefore-to-corner distance, so snugness adjustments
+      // (which move internodebefore) never change the dogbone's reach.
+      const shift = DOGBONE_REACH_FRACTION * kd;
+      const dbc = { x: pt.x + ux * shift, y: pt.y + uy * shift, type: 'dbc', nodeIdx: pt.nodeIdx };
+      const internodebefore2 = { x: pt.x, y: pt.y, type: 'internodebefore2', nodeIdx: pt.nodeIdx };
+      return [dbc, internodebefore2];
+    }
+
+    // 12b-iii — Insert dogbone node pairs into one cleaned array (green or red)
+    function insertDogboneNodes(arr, nodes, isGreen) {
+      if (!nodes) return arr;
+
+      // Collect all internodebefore points with their array index and turn angle
+      const cornerPts = [];
+      arr.forEach((pt, i) => {
+        if (pt.type !== 'internodebefore' || pt.nodeIdx == null) return;
+        const node = nodes[pt.nodeIdx];
+        if (!node) return;
+        const turnDeg = nodeTurnAngleDeg(node);
+        cornerPts.push({ i, pt, node, turnDeg });
+      });
+
+      let qualifying;
+      if (isGreen) {
+        // Green: every internodebefore within 89.9°-90.1° qualifies independently.
+        qualifying = cornerPts.filter(c => Math.abs(c.turnDeg - 90) <= 0.1);
+      } else {
+        // Red: whole-path gate — exactly 4 internodebefore points AND all 4
+        // within 89.9°-90.1°, otherwise none of this path's corners qualify.
+        const allQualify = cornerPts.length === 4
+          && cornerPts.every(c => Math.abs(c.turnDeg - 90) <= 0.1);
+        qualifying = allQualify ? cornerPts : [];
+      }
+
+      if (qualifying.length === 0) return arr;
+
+      const qualifyingIdx = new Set(qualifying.map(c => c.i));
+      const result = [];
+      arr.forEach((pt, i) => {
+        result.push(pt);
+        if (qualifyingIdx.has(i)) {
+          const node = nodes[pt.nodeIdx];
+          const [dbc, internodebefore2] = buildDogboneInsert(pt, node);
+          result.push(dbc, internodebefore2);
+        }
+      });
+      return result;
     }
 
     // 12a-DEBUG — Dump cleaned arrays grouped by nodeIdx after loop removal
@@ -3265,6 +3385,9 @@ const NODE_DOT_COLOR_MERGE_NEARBY = '#ffffff';
         document.getElementById('merge-panel').classList.remove('visible');
         document.getElementById('merge-slider').value = 0;
         document.getElementById('merge-slider-val').textContent = '0.00mm';
+        document.getElementById('snug-panel').classList.remove('visible');
+        document.getElementById('snug-slider').value = 0;
+        refreshSnugUI();
         document.getElementById('svg-file').value     = '';
       }
 
@@ -3326,7 +3449,7 @@ const NODE_DOT_COLOR_MERGE_NEARBY = '#ffffff';
       // Button UI state helper
       // All buttons default white. Yellow only after they have run.
       function resetButtonUI() {
-        const ids = ['trace-btn','remove-loops-btn','remove-curve-loops-btn','sharp-corners-btn','blunt-corners-btn'];
+        const ids = ['trace-btn','remove-loops-btn','dogbone-corners-btn','remove-curve-loops-btn','sharp-corners-btn','blunt-corners-btn'];
         ids.forEach(id => {
           const btn = document.getElementById(id);
           btn.style.transition = 'none';
@@ -3366,9 +3489,11 @@ const NODE_DOT_COLOR_MERGE_NEARBY = '#ffffff';
         }
         resetButtonUI();
         enableButton('remove-loops-btn');
+        enableButton('dogbone-corners-btn');
         runWithSpinner(btn, () => {
           traceKerfOffset();
         });
+        document.getElementById('snug-panel').classList.add('visible');
       });
 
       function updateMergeSliderColor(v) {
@@ -3411,8 +3536,40 @@ const NODE_DOT_COLOR_MERGE_NEARBY = '#ffffff';
       document.getElementById('merge-minus').addEventListener('click', () => stepMergeSlider(-0.01));
       document.getElementById('merge-plus').addEventListener('click',  () => stepMergeSlider( 0.01));
 
+      function refreshSnugUI() {
+        const v = parseFloat(document.getElementById('snug-slider').value);
+        snugAdjust = v;
+        const sign = v > 0 ? '+' : (v < 0 ? '\u2212' : '');
+        document.getElementById('snug-slider-val').textContent = sign + Math.abs(v).toFixed(3) + 'mm';
+      }
+
+      function retraceForSnugness() {
+        const btn = document.getElementById('trace-btn');
+        if (btn.disabled) return;
+        runWithSpinner(btn, () => {
+          traceKerfOffset();
+        });
+      }
+
+      document.getElementById('snug-slider').addEventListener('input', () => {
+        refreshSnugUI();
+        retraceForSnugness();
+      });
+
+      function stepSnugSlider(delta) {
+        const slider = document.getElementById('snug-slider');
+        const v = Math.min(0.01, Math.max(-0.05, parseFloat(slider.value) + delta));
+        slider.value = v.toFixed(3);
+        refreshSnugUI();
+        retraceForSnugness();
+      }
+      document.getElementById('snug-minus').addEventListener('click', () => stepSnugSlider(-0.005));
+      document.getElementById('snug-plus').addEventListener('click',  () => stepSnugSlider( 0.005));
+      refreshSnugUI();
+
       document.getElementById('remove-loops-btn').addEventListener('click', () => {
         const btn = document.getElementById('remove-loops-btn');
+        setButtonWhite('dogbone-corners-btn');
         enableButton('remove-curve-loops-btn');
         enableButton('sharp-corners-btn');
         enableButton('blunt-corners-btn');
@@ -3421,6 +3578,20 @@ const NODE_DOT_COLOR_MERGE_NEARBY = '#ffffff';
         setButtonWhite('blunt-corners-btn');
         runWithSpinner(btn, () => {
           removeInnerCornerLoops();
+        });
+      });
+
+      document.getElementById('dogbone-corners-btn').addEventListener('click', () => {
+        const btn = document.getElementById('dogbone-corners-btn');
+        setButtonWhite('remove-loops-btn');
+        enableButton('remove-curve-loops-btn');
+        enableButton('sharp-corners-btn');
+        enableButton('blunt-corners-btn');
+        setButtonWhite('remove-curve-loops-btn');
+        setButtonWhite('sharp-corners-btn');
+        setButtonWhite('blunt-corners-btn');
+        runWithSpinner(btn, () => {
+          applyDogboneCorners();
         });
       });
 
@@ -3464,7 +3635,8 @@ const NODE_DOT_COLOR_MERGE_NEARBY = '#ffffff';
       // Download warning check
       function getDownloadWarnings() {
         const warnings = [];
-        if (!document.getElementById('remove-loops-btn').classList.contains('primary'))
+        if (!document.getElementById('remove-loops-btn').classList.contains('primary')
+            && !document.getElementById('dogbone-corners-btn').classList.contains('primary'))
           warnings.push('remove inner corner loops not selected');
         if (!document.getElementById('remove-curve-loops-btn').classList.contains('primary'))
           warnings.push('remove curve loops not selected');
