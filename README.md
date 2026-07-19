@@ -15,6 +15,8 @@ This tool accounts for the true oval shape of your beam, giving you accurate ker
 - **Accurate kerf offset tracing** — traces inner and outer kerf offset for SVG shapes
 - **Oval beam support** — models your beam's true shape using width, height, and diagonal measurements
 - **Blunt Corners mode** — removes sharp points from inlay shapes so they fit perfectly into pockets
+- **Snugness slider** — fine tune the fit of finger joints and inlays for perfect friction fit
+- **Dogbone corners** — adds clearance in finger joint corners for a perfect fit
 - **Beam presets** — save your laser machine profiles for quick switching
 - **Multiple path support** — processes all closed paths in a single SVG file in one go. A text inlay of 100 letters can be processed in a few seconds
 - **No installation** — runs entirely in your browser, open the HTML file and go
@@ -64,7 +66,7 @@ Do not edit anything outside this section unless you know html
 
 ## Download
 
-Download the latest version: [Oval Kerf Offset.html](https://github.com/Longjohn1/Oval-Beam-Kerf-Offset/releases/download/V1.0/Oval.Kerf.Offset.html)
+Download the latest version: [Oval Kerf Offset.html](https://github.com/Longjohn1/Oval-Beam-Kerf-Offset/releases/download/V1.1/Oval_Kerf_Offset.html)
 
 Open it in any modern browser — no installation required.
 
